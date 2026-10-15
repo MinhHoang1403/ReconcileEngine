@@ -220,7 +220,21 @@ def export_run(
 ) -> FileResponse:
     run = _run_or_404(db, run_id)
     result = _result_or_404(run_id)
-    path = create_excel_export(run_id, result, run.current_revision)
+    session = db.get(UploadSession, run.upload_session_id)
+    path = create_excel_export(
+        run_id,
+        result,
+        run.current_revision,
+        run_metadata={
+            "status": run.status,
+            "currency": run.currency,
+            "created_at": run.created_at.isoformat() if run.created_at else None,
+            "completed_at": run.completed_at.isoformat() if run.completed_at else None,
+            "policy_snapshot": run.policy_snapshot,
+            "mapping_snapshot": run.mapping_snapshot,
+        },
+        source_manifest=session.source_manifest if session else {},
+    )
     existing = db.scalar(
         select(ArtifactManifest).where(
             ArtifactManifest.run_id == run_id,

@@ -190,7 +190,7 @@ def test_demo_to_export_uses_one_persisted_run(tmp_path: Path, monkeypatch) -> N
     assert session.get(UploadSession, inspection["session_id"]) is not None
     assert session.get(ReconciliationRun, run_id) is not None
 
-    workbook = load_workbook(export_path, data_only=False, read_only=True)
+    workbook = load_workbook(export_path, data_only=False)
     assert workbook.sheetnames == [
         "01_TongQuan_KPI",
         "02_Orders",
@@ -204,9 +204,37 @@ def test_demo_to_export_uses_one_persisted_run(tmp_path: Path, monkeypatch) -> N
     ]
     edge_sheet = workbook["05_AllocationEdges"]
     headers = [cell.value for cell in next(edge_sheet.iter_rows(max_row=1))]
-    cash_column = headers.index("allocated_cash_minor") + 1
+    cash_column = headers.index("Số tiền phân bổ") + 1
     exported_cash = sum(
         int(row[0] or 0)
         for row in edge_sheet.iter_rows(min_row=2, min_col=cash_column, max_col=cash_column, values_only=True)
     )
     assert exported_cash == summary["kpis"]["confirmed_cash_allocated_minor"]
+
+    overview = workbook["01_TongQuan_KPI"]
+    overview_values = {
+        overview.cell(row=row, column=1).value: overview.cell(row=row, column=2).value
+        for row in range(1, overview.max_row + 1)
+    }
+    assert overview_values["Tổng số tiền cần thu"] == summary["kpis"]["expected_receivable_minor"]
+    assert overview_values["Điều chỉnh đã xác minh"] == 2_000
+    assert "2.000 điều chỉnh đã xác minh" in overview_values["Phương trình phải thu"]
+
+    order_sheet = workbook["02_Orders"]
+    order_headers = [cell.value for cell in order_sheet[1]]
+    order_rows = {row[order_headers.index("Mã đơn hàng")].value: row for row in order_sheet.iter_rows(min_row=2)}
+    fee_order = order_rows["ORD00018"]
+    assert fee_order[order_headers.index("Số tiền cần thu")].value == 100_000
+    assert fee_order[order_headers.index("Tiền đã nhận và phân bổ")].value == 98_000
+    assert fee_order[order_headers.index("Điều chỉnh đã xác minh")].value == 2_000
+    assert fee_order[order_headers.index("Số tiền còn phải thu")].value == 0
+    assert fee_order[order_headers.index("Tệp nguồn")].value == "orders.csv"
+    assert fee_order[order_headers.index("Dòng nguồn")].value == 19
+    assert order_sheet.auto_filter.ref == f"A1:T{order_sheet.max_row}"
+    assert order_sheet.freeze_panes == "A2"
+
+    assert all(
+        cell.data_type != "f" for worksheet in workbook.worksheets for row in worksheet.iter_rows() for cell in row
+    )
+    manifest_values = [cell.value for row in workbook["09_RunManifest"].iter_rows(min_row=2) for cell in row]
+    assert not any(isinstance(value, str) and value.lstrip().startswith(("{", "[")) for value in manifest_values)
