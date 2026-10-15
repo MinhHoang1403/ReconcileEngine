@@ -1,0 +1,53 @@
+{
+  "counts": {
+    "bank_transactions": 98,
+    "orders": 100,
+    "truth_cases": 95,
+    "truth_edges": 98
+  },
+  "currency": "VND",
+  "dataset_id": "vn-synthetic-demo-seed-42",
+  "generator_version": "0.1.0",
+  "observed_vs_synthetic_columns": {
+    "all_business_columns": "synthetic"
+  },
+  "profile": "vn_synthetic_demo",
+  "reproducibility": "CSV and semantic payloads are deterministic for seed/config; XLSX is semantically equivalent.",
+  "rounding_policy": "HALF_UP",
+  "scenario_realized_counts": {
+    "AMBIGUOUS_CANDIDATES": 1,
+    "COMPLEX_MANY_TO_MANY": 1,
+    "DEBIT_EXCLUDED": 1,
+    "DISTINCT_SAME_AMOUNT": 1,
+    "DUPLICATE_IMPORT": 1,
+    "EXACT_REF": 75,
+    "FORMULA_INJECTION_SOURCE": 1,
+    "FUZZY_OR_TYPO_REF": 1,
+    "LEADING_ZERO_ID": 1,
+    "MANY_ORDERS_ONE_BANK": 1,
+    "NORMALIZED_REF": 1,
+    "ONE_ORDER_MANY_BANKS": 1,
+    "ORPHAN_BANK": 1,
+    "ORPHAN_INTERNAL": 1,
+    "OVERPAY": 1,
+    "PARTIAL_UNDERPAY": 1,
+    "REFERENCE_BOUNDARY": 1,
+    "TIMING_T_PLUS_N": 1,
+    "UNVERIFIED_FEE": 1,
+    "VERIFIED_PSP_FEE": 1,
+    "WEAK_MANY_ORDERS_ONE_BANK": 1
+  },
+  "seed": 42,
+  "semantic_hashes": {
+    "bank_transactions": "3cd11469c60e96c8637800384e5289ddab8866b90fb55fb2439ce2c87b0ec65e",
+    "orders": "623eabee01004bdf26e694aa4d11ecdb861093151bb5588c73e4abfbcaa33614",
+    "truth_cases": "08d358aa177eaba5720cb35aed6857650f765cd81dcc87d8d859d8d6638b61c7",
+    "truth_edges": "48648e08b8f5f302418881a2392ddd64e3144bd17082fd8b7f789806f9ea0341"
+  },
+  "source_semantics": {
+    "bank_transactions": "synthetic posted bank/PSP rows; not real statements",
+    "orders": "synthetic receivables"
+  },
+  "timezone": "Asia/Ho_Chi_Minh",
+  "truth_version": "2026-10-15"
+}

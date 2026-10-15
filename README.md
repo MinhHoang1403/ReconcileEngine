@@ -49,3 +49,12 @@ Backend host cần một `DATABASE_URL` PostgreSQL phù hợp. Migration đượ
 
 Chi tiết kiến trúc và hợp đồng nghiệp vụ nằm trong `docs/`.
 
+## Sinh lại dữ liệu demo
+
+Bộ VND gồm 100 khoản phải thu và feed bank/PSP synthetic. Truth được ghi ra file riêng, không nằm trong hai feed nghiệp vụ:
+
+```powershell
+uv run python scripts/generate_demo.py --seed 42 --orders 100
+```
+
+Xem provenance và giới hạn sử dụng Olist trong `docs/DATA_ATTRIBUTION.md`.

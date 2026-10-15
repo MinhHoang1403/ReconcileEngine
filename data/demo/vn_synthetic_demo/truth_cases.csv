@@ -1,0 +1,96 @@
+case_id,scenario,order_ids,bank_txn_ids,expected_link_status,expected_payment_status,note
+F01,EXACT_REF,"[""ORD00001""]","[""TXN00001""]",CONFIRMED,FULL,Exact full token reference
+F02,TIMING_T_PLUS_N,"[""ORD00002""]","[""TXN00002""]",CONFIRMED,FULL,Full reference with T+2 lag
+F03,NORMALIZED_REF,"[""ORD00003""]","[""TXN00003""]",CONFIRMED,FULL,Configured spacing/case normalization
+F04,FUZZY_OR_TYPO_REF,"[""ORD00004""]","[""TXN00004""]",PROPOSED,UNKNOWN,Typo is truth for evaluation but must not auto-confirm
+F05,AMBIGUOUS_CANDIDATES,"[""ORD00005"",""ORD00006""]","[""TXN00005""]",PROPOSED,UNKNOWN,Same amount/date has two candidates and no independent evidence
+F06,MANY_ORDERS_ONE_BANK,"[""ORD00007"",""ORD00008""]","[""TXN00006""]",CONFIRMED,FULL,Two full references and exact total
+F07,WEAK_MANY_ORDERS_ONE_BANK,"[""ORD00009"",""ORD00010""]","[""TXN00007""]",PROPOSED,UNKNOWN,Exact subset without reference remains proposed
+F08,ONE_ORDER_MANY_BANKS,"[""ORD00011""]","[""TXN00008"",""TXN00009""]",CONFIRMED,FULL,Two credits carry the same unique full reference
+F09,PARTIAL_UNDERPAY,"[""ORD00012""]","[""TXN00010""]",CONFIRMED,PARTIAL,Strong link with 10000 outstanding
+F10,OVERPAY,"[""ORD00013""]","[""TXN00011""]",CONFIRMED,OVERPAID,20000 remains unapplied on bank credit
+F11,ORPHAN_INTERNAL,"[""ORD00014""]",[],UNMATCHED,NO_CONFIRMED_RECEIPT,No counterpart evidence generated
+F12,ORPHAN_BANK,[],"[""TXN00012""]",UNMATCHED,UNKNOWN,Eligible credit with no receivable counterpart
+F13,DUPLICATE_IMPORT,"[""ORD00015""]","[""TXN00013-A"",""TXN00013-B""]",CONFIRMED,FULL,Second identical stable transaction is a re-import suspicion
+F14,DISTINCT_SAME_AMOUNT,"[""ORD00016"",""ORD00017""]","[""TXN00014"",""TXN00015""]",CONFIRMED,FULL,Distinct bank identities remain distinct
+F15,VERIFIED_PSP_FEE,"[""ORD00018""]","[""TXN00016""]",CONFIRMED,FULL,Fee is backed by declared PSP settlement evidence
+F16,UNVERIFIED_FEE,"[""ORD00019""]","[""TXN00017""]",CONFIRMED,PARTIAL,Bank transfer shortfall is not an automatic fee
+F17,DEBIT_EXCLUDED,"[""ORD00020""]","[""TXN00018""]",UNMATCHED,NO_CONFIRMED_RECEIPT,Debit is excluded from incoming cash pool
+F18,REFERENCE_BOUNDARY,"[""DH01"",""DH010""]","[""TXN00019""]",CONFIRMED,FULL,Token boundary must not select DH010
+F22,LEADING_ZERO_ID,"[""00017""]","[""TXN00022""]",CONFIRMED,FULL,String identity retains leading zeros
+F23,FORMULA_INJECTION_SOURCE,"[""ORD00028""]","[""TXN00023""]",CONFIRMED,FULL,User-origin text must be escaped only on export
+F24,COMPLEX_MANY_TO_MANY,"[""ORD00029"",""ORD00030""]","[""TXN00024"",""TXN00025""]",PROPOSED,UNKNOWN,General many-to-many remains review-only
+DEMO-00031,EXACT_REF,"[""ORD00031""]","[""TXN00031""]",CONFIRMED,FULL,Seeded exact filler
+DEMO-00032,EXACT_REF,"[""ORD00032""]","[""TXN00032""]",CONFIRMED,FULL,Seeded exact filler
+DEMO-00033,EXACT_REF,"[""ORD00033""]","[""TXN00033""]",CONFIRMED,FULL,Seeded exact filler
+DEMO-00034,EXACT_REF,"[""ORD00034""]","[""TXN00034""]",CONFIRMED,FULL,Seeded exact filler
+DEMO-00035,EXACT_REF,"[""ORD00035""]","[""TXN00035""]",CONFIRMED,FULL,Seeded exact filler
+DEMO-00036,EXACT_REF,"[""ORD00036""]","[""TXN00036""]",CONFIRMED,FULL,Seeded exact filler
+DEMO-00037,EXACT_REF,"[""ORD00037""]","[""TXN00037""]",CONFIRMED,FULL,Seeded exact filler
+DEMO-00038,EXACT_REF,"[""ORD00038""]","[""TXN00038""]",CONFIRMED,FULL,Seeded exact filler
+DEMO-00039,EXACT_REF,"[""ORD00039""]","[""TXN00039""]",CONFIRMED,FULL,Seeded exact filler
+DEMO-00040,EXACT_REF,"[""ORD00040""]","[""TXN00040""]",CONFIRMED,FULL,Seeded exact filler
+DEMO-00041,EXACT_REF,"[""ORD00041""]","[""TXN00041""]",CONFIRMED,FULL,Seeded exact filler
+DEMO-00042,EXACT_REF,"[""ORD00042""]","[""TXN00042""]",CONFIRMED,FULL,Seeded exact filler
+DEMO-00043,EXACT_REF,"[""ORD00043""]","[""TXN00043""]",CONFIRMED,FULL,Seeded exact filler
+DEMO-00044,EXACT_REF,"[""ORD00044""]","[""TXN00044""]",CONFIRMED,FULL,Seeded exact filler
+DEMO-00045,EXACT_REF,"[""ORD00045""]","[""TXN00045""]",CONFIRMED,FULL,Seeded exact filler
+DEMO-00046,EXACT_REF,"[""ORD00046""]","[""TXN00046""]",CONFIRMED,FULL,Seeded exact filler
+DEMO-00047,EXACT_REF,"[""ORD00047""]","[""TXN00047""]",CONFIRMED,FULL,Seeded exact filler
+DEMO-00048,EXACT_REF,"[""ORD00048""]","[""TXN00048""]",CONFIRMED,FULL,Seeded exact filler
+DEMO-00049,EXACT_REF,"[""ORD00049""]","[""TXN00049""]",CONFIRMED,FULL,Seeded exact filler
+DEMO-00050,EXACT_REF,"[""ORD00050""]","[""TXN00050""]",CONFIRMED,FULL,Seeded exact filler
+DEMO-00051,EXACT_REF,"[""ORD00051""]","[""TXN00051""]",CONFIRMED,FULL,Seeded exact filler
+DEMO-00052,EXACT_REF,"[""ORD00052""]","[""TXN00052""]",CONFIRMED,FULL,Seeded exact filler
+DEMO-00053,EXACT_REF,"[""ORD00053""]","[""TXN00053""]",CONFIRMED,FULL,Seeded exact filler
+DEMO-00054,EXACT_REF,"[""ORD00054""]","[""TXN00054""]",CONFIRMED,FULL,Seeded exact filler
+DEMO-00055,EXACT_REF,"[""ORD00055""]","[""TXN00055""]",CONFIRMED,FULL,Seeded exact filler
+DEMO-00056,EXACT_REF,"[""ORD00056""]","[""TXN00056""]",CONFIRMED,FULL,Seeded exact filler
+DEMO-00057,EXACT_REF,"[""ORD00057""]","[""TXN00057""]",CONFIRMED,FULL,Seeded exact filler
+DEMO-00058,EXACT_REF,"[""ORD00058""]","[""TXN00058""]",CONFIRMED,FULL,Seeded exact filler
+DEMO-00059,EXACT_REF,"[""ORD00059""]","[""TXN00059""]",CONFIRMED,FULL,Seeded exact filler
+DEMO-00060,EXACT_REF,"[""ORD00060""]","[""TXN00060""]",CONFIRMED,FULL,Seeded exact filler
+DEMO-00061,EXACT_REF,"[""ORD00061""]","[""TXN00061""]",CONFIRMED,FULL,Seeded exact filler
+DEMO-00062,EXACT_REF,"[""ORD00062""]","[""TXN00062""]",CONFIRMED,FULL,Seeded exact filler
+DEMO-00063,EXACT_REF,"[""ORD00063""]","[""TXN00063""]",CONFIRMED,FULL,Seeded exact filler
+DEMO-00064,EXACT_REF,"[""ORD00064""]","[""TXN00064""]",CONFIRMED,FULL,Seeded exact filler
+DEMO-00065,EXACT_REF,"[""ORD00065""]","[""TXN00065""]",CONFIRMED,FULL,Seeded exact filler
+DEMO-00066,EXACT_REF,"[""ORD00066""]","[""TXN00066""]",CONFIRMED,FULL,Seeded exact filler
+DEMO-00067,EXACT_REF,"[""ORD00067""]","[""TXN00067""]",CONFIRMED,FULL,Seeded exact filler
+DEMO-00068,EXACT_REF,"[""ORD00068""]","[""TXN00068""]",CONFIRMED,FULL,Seeded exact filler
+DEMO-00069,EXACT_REF,"[""ORD00069""]","[""TXN00069""]",CONFIRMED,FULL,Seeded exact filler
+DEMO-00070,EXACT_REF,"[""ORD00070""]","[""TXN00070""]",CONFIRMED,FULL,Seeded exact filler
+DEMO-00071,EXACT_REF,"[""ORD00071""]","[""TXN00071""]",CONFIRMED,FULL,Seeded exact filler
+DEMO-00072,EXACT_REF,"[""ORD00072""]","[""TXN00072""]",CONFIRMED,FULL,Seeded exact filler
+DEMO-00073,EXACT_REF,"[""ORD00073""]","[""TXN00073""]",CONFIRMED,FULL,Seeded exact filler
+DEMO-00074,EXACT_REF,"[""ORD00074""]","[""TXN00074""]",CONFIRMED,FULL,Seeded exact filler
+DEMO-00075,EXACT_REF,"[""ORD00075""]","[""TXN00075""]",CONFIRMED,FULL,Seeded exact filler
+DEMO-00076,EXACT_REF,"[""ORD00076""]","[""TXN00076""]",CONFIRMED,FULL,Seeded exact filler
+DEMO-00077,EXACT_REF,"[""ORD00077""]","[""TXN00077""]",CONFIRMED,FULL,Seeded exact filler
+DEMO-00078,EXACT_REF,"[""ORD00078""]","[""TXN00078""]",CONFIRMED,FULL,Seeded exact filler
+DEMO-00079,EXACT_REF,"[""ORD00079""]","[""TXN00079""]",CONFIRMED,FULL,Seeded exact filler
+DEMO-00080,EXACT_REF,"[""ORD00080""]","[""TXN00080""]",CONFIRMED,FULL,Seeded exact filler
+DEMO-00081,EXACT_REF,"[""ORD00081""]","[""TXN00081""]",CONFIRMED,FULL,Seeded exact filler
+DEMO-00082,EXACT_REF,"[""ORD00082""]","[""TXN00082""]",CONFIRMED,FULL,Seeded exact filler
+DEMO-00083,EXACT_REF,"[""ORD00083""]","[""TXN00083""]",CONFIRMED,FULL,Seeded exact filler
+DEMO-00084,EXACT_REF,"[""ORD00084""]","[""TXN00084""]",CONFIRMED,FULL,Seeded exact filler
+DEMO-00085,EXACT_REF,"[""ORD00085""]","[""TXN00085""]",CONFIRMED,FULL,Seeded exact filler
+DEMO-00086,EXACT_REF,"[""ORD00086""]","[""TXN00086""]",CONFIRMED,FULL,Seeded exact filler
+DEMO-00087,EXACT_REF,"[""ORD00087""]","[""TXN00087""]",CONFIRMED,FULL,Seeded exact filler
+DEMO-00088,EXACT_REF,"[""ORD00088""]","[""TXN00088""]",CONFIRMED,FULL,Seeded exact filler
+DEMO-00089,EXACT_REF,"[""ORD00089""]","[""TXN00089""]",CONFIRMED,FULL,Seeded exact filler
+DEMO-00090,EXACT_REF,"[""ORD00090""]","[""TXN00090""]",CONFIRMED,FULL,Seeded exact filler
+DEMO-00091,EXACT_REF,"[""ORD00091""]","[""TXN00091""]",CONFIRMED,FULL,Seeded exact filler
+DEMO-00092,EXACT_REF,"[""ORD00092""]","[""TXN00092""]",CONFIRMED,FULL,Seeded exact filler
+DEMO-00093,EXACT_REF,"[""ORD00093""]","[""TXN00093""]",CONFIRMED,FULL,Seeded exact filler
+DEMO-00094,EXACT_REF,"[""ORD00094""]","[""TXN00094""]",CONFIRMED,FULL,Seeded exact filler
+DEMO-00095,EXACT_REF,"[""ORD00095""]","[""TXN00095""]",CONFIRMED,FULL,Seeded exact filler
+DEMO-00096,EXACT_REF,"[""ORD00096""]","[""TXN00096""]",CONFIRMED,FULL,Seeded exact filler
+DEMO-00097,EXACT_REF,"[""ORD00097""]","[""TXN00097""]",CONFIRMED,FULL,Seeded exact filler
+DEMO-00098,EXACT_REF,"[""ORD00098""]","[""TXN00098""]",CONFIRMED,FULL,Seeded exact filler
+DEMO-00099,EXACT_REF,"[""ORD00099""]","[""TXN00099""]",CONFIRMED,FULL,Seeded exact filler
+DEMO-00100,EXACT_REF,"[""ORD00100""]","[""TXN00100""]",CONFIRMED,FULL,Seeded exact filler
+DEMO-00101,EXACT_REF,"[""ORD00101""]","[""TXN00101""]",CONFIRMED,FULL,Seeded exact filler
+DEMO-00102,EXACT_REF,"[""ORD00102""]","[""TXN00102""]",CONFIRMED,FULL,Seeded exact filler
+DEMO-00103,EXACT_REF,"[""ORD00103""]","[""TXN00103""]",CONFIRMED,FULL,Seeded exact filler
+DEMO-00104,EXACT_REF,"[""ORD00104""]","[""TXN00104""]",CONFIRMED,FULL,Seeded exact filler
