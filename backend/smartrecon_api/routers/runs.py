@@ -17,6 +17,7 @@ from backend.smartrecon_api.schemas.runs import (
     RunRequest,
 )
 from backend.smartrecon_api.services.artifacts import relative_artifact_path, sha256_path
+from backend.smartrecon_api.services.details import entity_detail, extend_group_detail
 from backend.smartrecon_api.services.exports import create_excel_export
 from backend.smartrecon_api.services.runs import execute_run, load_run_result, paginate
 
@@ -117,13 +118,40 @@ def get_groups(
 
 @router.get("/{run_id}/groups/{group_id}")
 def get_group(run_id: str, group_id: str, db: Session = Depends(get_db)) -> dict:
-    _run_or_404(db, run_id)
+    run = _run_or_404(db, run_id)
     result = _result_or_404(run_id)
-    group = next((item for item in result["groups"] if item["group_id"] == group_id), None)
+    session = db.get(UploadSession, run.upload_session_id)
+    group = extend_group_detail(result, session, group_id) if session else None
     if group is None:
         raise HTTPException(status_code=404, detail={"error_code": "GROUP_NOT_FOUND"})
-    group["allocations"] = [item for item in result["allocations"] if item["group_id"] == group_id]
     return group
+
+
+def _entity_detail_or_404(db: Session, run_id: str, entity_type: str, entity_id: str) -> dict[str, Any]:
+    run = _run_or_404(db, run_id)
+    session = db.get(UploadSession, run.upload_session_id)
+    detail = entity_detail(_result_or_404(run_id), session, entity_type, entity_id) if session else None
+    if detail is None:
+        raise HTTPException(
+            status_code=404,
+            detail={"error_code": "DETAIL_NOT_FOUND", "message": "Không tìm thấy bản ghi trong phiên đối soát."},
+        )
+    return detail
+
+
+@router.get("/{run_id}/orders/{order_id}")
+def get_order_detail(run_id: str, order_id: str, db: Session = Depends(get_db)) -> dict:
+    return _entity_detail_or_404(db, run_id, "order", order_id)
+
+
+@router.get("/{run_id}/bank-transactions/{bank_txn_id}")
+def get_bank_detail(run_id: str, bank_txn_id: str, db: Session = Depends(get_db)) -> dict:
+    return _entity_detail_or_404(db, run_id, "bank", bank_txn_id)
+
+
+@router.get("/{run_id}/exceptions/{exception_id}")
+def get_exception_detail(run_id: str, exception_id: str, db: Session = Depends(get_db)) -> dict:
+    return _entity_detail_or_404(db, run_id, "exception", exception_id)
 
 
 @router.get("/{run_id}/orders", response_model=PageResponse)

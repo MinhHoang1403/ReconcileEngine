@@ -30,15 +30,19 @@ test("dashboard sắp xếp đúng luồng, tra cứu trang hiện tại và xu�
     bankTransactions={[{ bank_txn_id: "BANK-001", posted_amount_minor: 850, allocated_cash_minor: 800, unapplied_minor: 50, direction: "CREDIT" }]}
     groups={[{ group_id: "group-1", group_type: "ONE_TO_ONE", order_ids: ["ORDER-001"], bank_txn_ids: ["BANK-001"], link_status: "PROPOSED", payment_statuses: {}, evidence: { rule_id: "R1", explanation_vi: "Cần kiểm tra", reason_codes: [] } }]}
     exceptions={[{ exception_id: "exception-1", reason_codes: ["UNMATCHED"], order_ids: ["ORDER-002"], bank_txn_ids: [], risk_amount_minor: 200 }]}
+    totals={{ orders: 2, bank: 1, groups: 1, exceptions: 1 }}
+    loadingMore={false}
+    onLoadMore={vi.fn()}
   />);
 
   expect(screen.getByRole("heading", { name: "Tổng quan kiểm soát" })).toBeInTheDocument();
   expect(screen.getByRole("heading", { name: "Phân tích kết quả" })).toBeInTheDocument();
+  expect(screen.getByText(/1.000.*800.*0.*200/)).toBeInTheDocument();
   expect(screen.getByRole("link", { name: "Tải báo cáo Excel" })).toHaveAttribute("href", "/api/runs/run-123/exports?format=xlsx");
   fireEvent.change(screen.getByPlaceholderText("Tìm theo mã, trạng thái hoặc quy tắc…"), { target: { value: "ORDER-002" } });
   expect(screen.queryByText("ORDER-001")).not.toBeInTheDocument();
   expect(screen.getByText("ORDER-002")).toBeInTheDocument();
-  fireEvent.click(screen.getByRole("tab", { name: /Nhóm đối soát/ }));
-  expect(screen.getByText("Đề xuất", { selector: "span" })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("tab", { name: /Nhóm đối chiếu/ }));
+  expect(screen.getByText("Đề xuất, chưa xác nhận", { selector: "span" })).toBeInTheDocument();
   expect(screen.getAllByText("run-123").length).toBeGreaterThan(0);
 });

@@ -8,7 +8,7 @@ import { MappingEditor } from "./components/MappingEditor";
 import { ProgressStepper, type WorkflowStep } from "./components/ProgressStepper";
 import { RawPreview } from "./components/RawPreview";
 import { SourceWorkspace } from "./components/SourceWorkspace";
-import type { BankRow, DashboardData, ExceptionRow, GroupRow, HealthIssue, HealthResponse, Inspection, MappingState, OrderRow } from "./types";
+import type { BankRow, DashboardData, ExceptionRow, ExplorerTotals, GroupRow, HealthIssue, HealthResponse, Inspection, MappingState, OrderRow } from "./types";
 import "./styles.css";
 
 const initialMapping = (inspection: Inspection): MappingState => ({
@@ -33,6 +33,9 @@ export function App() {
   const [exceptions, setExceptions] = useState<ExceptionRow[]>([]);
   const [orders, setOrders] = useState<OrderRow[]>([]);
   const [bankTransactions, setBankTransactions] = useState<BankRow[]>([]);
+  const [explorerTotals, setExplorerTotals] = useState<ExplorerTotals>({ orders: 0, bank: 0, groups: 0, exceptions: 0 });
+  const [loadedAt, setLoadedAt] = useState<string | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [runId, setRunId] = useState<string | null>(null);
   const [reopenId, setReopenId] = useState("");
   const [ordersFile, setOrdersFile] = useState<File | null>(null);
@@ -70,8 +73,8 @@ export function App() {
   }
 
   async function loadRun(id: string) {
-    const [summary, groupPage, exceptionPage, orderPage, bankPage] = await Promise.all([
-      api.dashboard(id), api.groups(id), api.exceptions(id), api.orders(id), api.bankTransactions(id),
+    const [run, summary, groupPage, exceptionPage, orderPage, bankPage] = await Promise.all([
+      api.run(id), api.dashboard(id), api.groups(id), api.exceptions(id), api.orders(id), api.bankTransactions(id),
     ]);
     setRunId(id);
     setDashboard(summary);
@@ -79,7 +82,40 @@ export function App() {
     setExceptions(exceptionPage.items);
     setOrders(orderPage.items);
     setBankTransactions(bankPage.items);
+    setExplorerTotals({ orders: orderPage.total, bank: bankPage.total, groups: groupPage.total, exceptions: exceptionPage.total });
+    setLoadedAt(run.completed_at ?? run.created_at);
     setStep("dashboard");
+  }
+
+  async function loadMore(kind: keyof ExplorerTotals) {
+    if (!runId || loadingMore) return;
+    const current = { orders, bank: bankTransactions, groups, exceptions }[kind];
+    if (current.length >= explorerTotals[kind]) return;
+    setLoadingMore(true);
+    setError(null);
+    try {
+      const page = Math.floor(current.length / 50) + 1;
+      if (kind === "orders") {
+        const next = await api.orders(runId, page);
+        setOrders((items) => [...items, ...next.items]);
+      }
+      if (kind === "bank") {
+        const next = await api.bankTransactions(runId, page);
+        setBankTransactions((items) => [...items, ...next.items]);
+      }
+      if (kind === "groups") {
+        const next = await api.groups(runId, page);
+        setGroups((items) => [...items, ...next.items]);
+      }
+      if (kind === "exceptions") {
+        const next = await api.exceptions(runId, page);
+        setExceptions((items) => [...items, ...next.items]);
+      }
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Không thể tải thêm dữ liệu");
+    } finally {
+      setLoadingMore(false);
+    }
   }
 
   async function runReconciliation() {
@@ -90,7 +126,7 @@ export function App() {
   async function reopenRun() {
     const id = reopenId.trim();
     if (!id) return;
-    await action(async () => { await api.run(id); return id; }, loadRun);
+    await action(() => Promise.resolve(id), loadRun);
   }
 
   function reset() {
@@ -104,6 +140,8 @@ export function App() {
     setExceptions([]);
     setOrders([]);
     setBankTransactions([]);
+    setExplorerTotals({ orders: 0, bank: 0, groups: 0, exceptions: 0 });
+    setLoadedAt(null);
     setOrdersFile(null);
     setBankFile(null);
     setError(null);
@@ -164,10 +202,10 @@ export function App() {
         {step === "dashboard" && dashboard && runId && (
           <section className="page-section stack" aria-labelledby="dashboard-title">
             <div className="section-heading dashboard-heading">
-              <div><p className="eyebrow">RUN {runId.slice(0, 8)} · REVISION {dashboard.effective_revision}</p><h1 id="dashboard-title">Kết quả đối soát</h1><p>Tổng quan, phân tích và bằng chứng truy vết của phiên hiện tại.</p></div>
+              <div><p className="eyebrow">MÃ PHIÊN {runId.slice(0, 8)} · LẦN CẬP NHẬT {loadedAt ? new Intl.DateTimeFormat("vi-VN", { dateStyle: "short", timeStyle: "short" }).format(new Date(loadedAt)) : "—"}</p><h1 id="dashboard-title">Kết quả đối soát</h1><p>Tổng quan, phân tích và bằng chứng truy vết của phiên hiện tại.</p></div>
               <button className="secondary" type="button" onClick={reset}>Tạo phiên mới</button>
             </div>
-            <Dashboard data={dashboard} groups={groups} exceptions={exceptions} orders={orders} bankTransactions={bankTransactions} runId={runId} />
+            <Dashboard data={dashboard} groups={groups} exceptions={exceptions} orders={orders} bankTransactions={bankTransactions} totals={explorerTotals} loadingMore={loadingMore} onLoadMore={loadMore} runId={runId} />
           </section>
         )}
       </main>

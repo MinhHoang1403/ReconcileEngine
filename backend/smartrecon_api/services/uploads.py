@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import csv
 import shutil
 from dataclasses import asdict
 from pathlib import Path
@@ -9,6 +10,7 @@ from typing import Any
 from uuid import uuid4
 
 from fastapi import UploadFile
+from openpyxl import load_workbook
 from sqlalchemy.orm import Session
 
 from backend.smartrecon_api.db.models import ArtifactManifest, UploadSession
@@ -188,6 +190,63 @@ def load_raw_bundle(session: UploadSession) -> RawSourceBundle:
     )
 
 
+def read_source_rows(
+    session: UploadSession,
+    feed: str,
+    row_numbers: list[int],
+    *,
+    limit: int = 50,
+) -> dict[int, dict[str, Any]]:
+    """Stream selected source rows without accepting a client-controlled artifact path."""
+    if feed not in {"orders", "bank_transactions"}:
+        raise ValueError("Nguồn dữ liệu không hợp lệ")
+    targets = sorted({number for number in row_numbers if number >= 2})
+    if len(targets) > limit:
+        raise ValueError(f"Chỉ được đọc tối đa {limit} dòng nguồn mỗi yêu cầu")
+    if not targets:
+        return {}
+    paths = session.source_manifest["source_paths"]
+    path_key = "orders" if feed == "orders" else "bank"
+    relative = paths.get(path_key) or paths.get("workbook")
+    path = resolve_artifact_path(relative)
+    if path.suffix.lower() == ".csv":
+        return _stream_csv_rows(path, targets)
+    file_key = "orders" if feed == "orders" else "bank"
+    sheet_name = session.source_manifest.get("files", {}).get(file_key, {}).get("sheet")
+    return _stream_xlsx_rows(path, sheet_name, targets)
+
+
+def _stream_csv_rows(path: Path, targets: list[int]) -> dict[int, dict[str, Any]]:
+    found: dict[int, dict[str, Any]] = {}
+    with path.open("r", encoding="utf-8-sig", newline="") as handle:
+        reader = csv.DictReader(handle)
+        for row_number, row in enumerate(reader, start=2):
+            if row_number in targets:
+                found[row_number] = {str(key): value for key, value in row.items()}
+            if row_number >= targets[-1]:
+                break
+    return found
+
+
+def _stream_xlsx_rows(path: Path, sheet_name: str | None, targets: list[int]) -> dict[int, dict[str, Any]]:
+    workbook = load_workbook(path, read_only=True, data_only=True, keep_links=False)
+    try:
+        worksheet = workbook[sheet_name] if sheet_name else workbook.active
+        iterator = worksheet.iter_rows(values_only=True)
+        headers = [str(value or "") for value in next(iterator)]
+        found: dict[int, dict[str, Any]] = {}
+        for row_number, values in enumerate(iterator, start=2):
+            if row_number in targets:
+                found[row_number] = {
+                    header: "" if value is None else str(value) for header, value in zip(headers, values, strict=False)
+                }
+            if row_number >= targets[-1]:
+                break
+        return found
+    finally:
+        workbook.close()
+
+
 def confirm_mapping(db: Session, session: UploadSession, request: MappingRequest) -> dict[str, Any]:
     mapping = mapping_from_request(request)
     raw = load_raw_bundle(session)
@@ -265,8 +324,7 @@ def _health_issue_details(
     tables = {"orders": raw.orders, "bank_transactions": raw.bank_transactions}
     actions = {
         "POSSIBLE_REIMPORT": (
-            "So sánh hai dòng nguồn và mã giao dịch; chỉ loại trừ khi xác minh "
-            "đây là cùng một giao dịch nhập lặp."
+            "So sánh hai dòng nguồn và mã giao dịch; chỉ loại trừ khi xác minh đây là cùng một giao dịch nhập lặp."
         ),
         "MISSING_REFERENCE_EVIDENCE": (
             "Bổ sung mã tham chiếu hoặc nội dung giao dịch nếu nguồn có dữ liệu; "

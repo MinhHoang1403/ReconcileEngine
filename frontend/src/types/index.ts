@@ -82,6 +82,8 @@ export type RunCreated = {
 export type RunDetail = RunCreated & {
   upload_session_id: string;
   currency: string;
+  created_at: string;
+  completed_at: string | null;
 };
 
 export type DashboardData = {
@@ -128,3 +130,70 @@ export type BankRow = {
   unapplied_minor: number;
   direction: string;
 };
+
+export type SourceTrace = {
+  filename: string | null;
+  sheet_name: string | null;
+  row_number: number | null;
+  row_hash: string | null;
+  file_id: string | null;
+  raw_values: Record<string, unknown>;
+};
+
+export type DetailOrder = Record<string, unknown> & {
+  order_id: string;
+  expected_amount_minor: number;
+  source: SourceTrace;
+};
+
+export type DetailBankTransaction = Record<string, unknown> & {
+  bank_txn_id: string;
+  posted_amount_minor: number;
+  source: SourceTrace;
+};
+
+export type AllocationRow = {
+  edge_id: string;
+  group_id: string;
+  order_id: string;
+  bank_txn_id: string;
+  allocated_cash_minor: number;
+  currency: string;
+};
+
+export type TransactionDetail = {
+  entity_type: "order" | "bank" | "group" | "exception";
+  entity_id: string;
+  overview: {
+    link_status: string;
+    payment_statuses: Record<string, string>;
+    relationship_types: string[];
+    expected_amount_minor: number;
+    posted_amount_minor: number;
+    allocated_cash_minor: number;
+    verified_adjustment_minor: number;
+    outstanding_minor: number;
+    unapplied_minor: number;
+  };
+  orders: DetailOrder[];
+  bank_transactions: DetailBankTransaction[];
+  groups: GroupRow[];
+  allocations: AllocationRow[];
+  adjustments: Record<string, unknown>[];
+  candidates: Record<string, unknown>[];
+  exceptions: ExceptionRow[];
+  selected_exception: ExceptionRow | null;
+  guidance_vi: string;
+};
+
+export type GroupDetail = GroupRow & {
+  allocations: AllocationRow[];
+  order_records: DetailOrder[];
+  bank_transaction_records: DetailBankTransaction[];
+  adjustments: Record<string, unknown>[];
+  exceptions: ExceptionRow[];
+  candidates: Record<string, unknown>[];
+  totals: TransactionDetail["overview"];
+};
+
+export type ExplorerTotals = Record<"orders" | "bank" | "groups" | "exceptions", number>;

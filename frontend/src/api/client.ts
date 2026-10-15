@@ -5,12 +5,14 @@ import type {
   GroupRow,
   HealthResponse,
   HealthIssueDetail,
+  GroupDetail,
   Inspection,
   MappingState,
   OrderRow,
   Paged,
   RunCreated,
   RunDetail,
+  TransactionDetail,
 } from "../types";
 
 async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
@@ -81,10 +83,20 @@ export const api = {
     }),
   dashboard: (runId: string) => requestJson<DashboardData>(`/api/runs/${runId}/dashboard`),
   run: (runId: string) => requestJson<RunDetail>(`/api/runs/${runId}`),
-  groups: (runId: string) => requestJson<Paged<GroupRow>>(`/api/runs/${runId}/groups?page_size=100`),
-  exceptions: (runId: string) =>
-    requestJson<Paged<ExceptionRow>>(`/api/runs/${runId}/exceptions?page_size=100`),
-  orders: (runId: string) => requestJson<Paged<OrderRow>>(`/api/runs/${runId}/orders?page_size=100`),
-  bankTransactions: (runId: string) =>
-    requestJson<Paged<BankRow>>(`/api/runs/${runId}/bank-transactions?page_size=100`),
+  groups: (runId: string, page = 1, pageSize = 50) =>
+    requestJson<Paged<GroupRow>>(`/api/runs/${runId}/groups?page=${page}&page_size=${pageSize}`),
+  exceptions: (runId: string, page = 1, pageSize = 50) =>
+    requestJson<Paged<ExceptionRow>>(`/api/runs/${runId}/exceptions?page=${page}&page_size=${pageSize}`),
+  orders: (runId: string, page = 1, pageSize = 50) =>
+    requestJson<Paged<OrderRow>>(`/api/runs/${runId}/orders?page=${page}&page_size=${pageSize}`),
+  bankTransactions: (runId: string, page = 1, pageSize = 50) =>
+    requestJson<Paged<BankRow>>(`/api/runs/${runId}/bank-transactions?page=${page}&page_size=${pageSize}`),
+  orderDetail: (runId: string, orderId: string) =>
+    requestJson<TransactionDetail>(`/api/runs/${runId}/orders/${encodeURIComponent(orderId)}`),
+  bankTransactionDetail: (runId: string, bankTxnId: string) =>
+    requestJson<TransactionDetail>(`/api/runs/${runId}/bank-transactions/${encodeURIComponent(bankTxnId)}`),
+  exceptionDetail: (runId: string, exceptionId: string) =>
+    requestJson<TransactionDetail>(`/api/runs/${runId}/exceptions/${encodeURIComponent(exceptionId)}`),
+  groupDetail: (runId: string, groupId: string) =>
+    requestJson<GroupDetail>(`/api/runs/${runId}/groups/${encodeURIComponent(groupId)}`),
 };
