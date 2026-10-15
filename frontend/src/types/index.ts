@@ -103,7 +103,7 @@ export type OrderRow = {
 
 export type BankRow = {
   bank_txn_id: string;
-  amount_minor: number;
+  posted_amount_minor: number;
   allocated_cash_minor: number;
   unapplied_minor: number;
   direction: string;

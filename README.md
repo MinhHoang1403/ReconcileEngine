@@ -60,3 +60,9 @@ uv run python scripts/generate_demo.py --seed 42 --orders 100
 ```
 
 Xem provenance và giới hạn sử dụng Olist trong `docs/DATA_ATTRIBUTION.md`.
+
+## Tài liệu vận hành và nghiệm thu
+
+- `docs/API_CONTRACT.md`: endpoints, DTO, mã lỗi, pagination và an toàn upload/export.
+- `docs/OPERATIONS.md`: hướng dẫn Windows/PowerShell, Docker Desktop/WSL2, restart và chẩn đoán.
+- `docs/QA_REPORT.md`: lệnh và bằng chứng test/Docker/browser/persistence đã chạy thực tế.

@@ -57,7 +57,7 @@ export function Dashboard({
         </article>
         <article className="data-card">
           <div className="data-card__header"><h3>Giao dịch ngân hàng</h3><span className="count-pill">{bankTransactions.length}</span></div>
-          <div className="table-wrap compact-table"><table><thead><tr><th>Bank ID</th><th>Amount</th><th>Allocated</th><th>Unapplied</th><th>Direction</th></tr></thead><tbody>{bankTransactions.slice(0, 30).map((row) => <tr key={row.bank_txn_id}><td>{row.bank_txn_id}</td><td>{formatMoney(row.amount_minor, currency)}</td><td>{formatMoney(row.allocated_cash_minor, currency)}</td><td>{formatMoney(row.unapplied_minor, currency)}</td><td>{row.direction}</td></tr>)}</tbody></table></div>
+          <div className="table-wrap compact-table"><table><thead><tr><th>Bank ID</th><th>Amount</th><th>Allocated</th><th>Unapplied</th><th>Direction</th></tr></thead><tbody>{bankTransactions.slice(0, 30).map((row) => <tr key={row.bank_txn_id}><td>{row.bank_txn_id}</td><td>{formatMoney(row.posted_amount_minor, currency)}</td><td>{formatMoney(row.allocated_cash_minor, currency)}</td><td>{formatMoney(row.unapplied_minor, currency)}</td><td>{row.direction}</td></tr>)}</tbody></table></div>
         </article>
       </div>
       <div className="two-column charts">
