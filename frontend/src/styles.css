@@ -143,8 +143,18 @@ tbody tr:hover td { background: #fafcfb; }
 .field-label > span { display: flex; align-items: baseline; gap: 7px; }
 .field-label small { color: #829087; font: .68rem ui-monospace, SFMono-Regular, Consolas, monospace; }
 .field-label em { border-radius: 99px; background: #eef5f1; padding: 3px 6px; color: var(--brand); font-size: .62rem; font-style: normal; text-transform: uppercase; }
+.field-label em.optional-tag { background: #f1f3f2; color: #66776f; }
+.field-help, .field-sample, .field-error { font-size: .68rem; font-weight: 500; line-height: 1.45; }
+.field-help { color: var(--muted); }
+.field-sample { overflow: hidden; color: #53655c; text-overflow: ellipsis; white-space: nowrap; }
+.field-error { color: var(--danger); font-weight: 700; }
+.mapping-warning { margin-bottom: 14px; border: 1px solid #e4bd78; border-radius: 9px; background: var(--warning-soft); padding: 10px 12px; color: var(--warning); font-size: .76rem; line-height: 1.5; }
 .optional-fields { margin-top: 16px; border-top: 1px solid var(--line); padding-top: 14px; }
 .optional-fields summary { margin-bottom: 14px; color: var(--brand); font-size: .8rem; font-weight: 750; cursor: pointer; }
+.optional-note { margin: -5px 0 13px; font-size: .72rem; }
+.defaults-note { display: grid; gap: 4px; margin-top: 14px; border-radius: 9px; background: #f4f7f5; padding: 10px 12px; }
+.defaults-note strong { font-size: .74rem; }
+.defaults-note span { color: var(--muted); font-size: .7rem; line-height: 1.5; }
 .action-bar { display: flex; align-items: center; justify-content: space-between; gap: 20px; border: 1px solid #cddbd4; border-radius: 14px; background: #f8fbf9; padding: 16px 18px; }
 .action-bar strong { font-size: .86rem; }
 .action-bar p { margin: 3px 0 0; font-size: .78rem; }

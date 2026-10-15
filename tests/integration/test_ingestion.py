@@ -83,6 +83,37 @@ def test_mapping_suggestions_are_alias_based_and_require_confirmation() -> None:
     }
 
 
+def test_mapping_suggestions_accept_exact_vietnamese_aliases_without_fuzzy_guessing() -> None:
+    suggestions = suggest_mapping(
+        ["MÃ ĐƠN HÀNG", "Ngày phát sinh", "Số tiền cần thu", "ma don hang gan giong"],
+        {"order_id", "ordered_at", "expected_amount"},
+    )
+    assert suggestions == {
+        "expected_amount": "Số tiền cần thu",
+        "order_id": "MÃ ĐƠN HÀNG",
+        "ordered_at": "Ngày phát sinh",
+    }
+
+
+def test_ambiguous_normalized_header_is_not_suggested() -> None:
+    suggestions = suggest_mapping(["Mã đơn hàng", "ma-don-hang"], {"order_id"})
+    assert suggestions == {}
+
+
+def test_reusing_one_source_column_for_multiple_fields_blocks_health() -> None:
+    raw = _read_demo_csv()
+    mapping = default_demo_mapping()
+    conflicted = MappingConfig(
+        order_columns=mapping.order_columns | {"ordered_at": mapping.order_columns["order_id"]},
+        bank_columns=mapping.bank_columns,
+        currency=mapping.currency,
+    )
+    normalized = normalize_bundle(raw, conflicted)
+    issue = next(item for item in normalized.issues if item.code == "SOURCE_COLUMN_REUSED")
+    assert issue.severity is Severity.BLOCKING
+    assert "order_id" in issue.message_vi
+
+
 def test_leading_zero_identifier_survives_csv_and_xlsx() -> None:
     mapping = default_demo_mapping()
     for raw in (

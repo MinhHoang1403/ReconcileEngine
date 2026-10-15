@@ -105,6 +105,23 @@ def _validate_mapping(
                 f"Không tìm thấy cột nguồn: {', '.join(absent_columns)}",
             )
         )
+    selected: dict[str, list[str]] = {}
+    for canonical, source in columns.items():
+        if source:
+            selected.setdefault(source, []).append(canonical)
+    conflicts = {source: fields for source, fields in selected.items() if len(fields) > 1}
+    if conflicts:
+        explanation = "; ".join(
+            f"cột '{source}' đang dùng cho {', '.join(sorted(fields))}" for source, fields in sorted(conflicts.items())
+        )
+        issues.append(
+            DataIssue(
+                "SOURCE_COLUMN_REUSED",
+                Severity.BLOCKING,
+                feed,
+                f"Một cột nguồn không thể đại diện cho nhiều trường chuẩn: {explanation}.",
+            )
+        )
     return issues
 
 
@@ -294,7 +311,15 @@ def _add_semantic_issues(orders: list[Order], banks: list[BankTransaction], issu
                         f"Giao dịch {bank.bank_txn_id} có fingerprint giống "
                         f"{owner.bank_txn_id}; cần xác minh trước khi dùng cash."
                     ),
-                    (bank.lineage.source_row_number if bank.lineage else 0,),
+                    tuple(
+                        row
+                        for row in (
+                            owner.lineage.source_row_number if owner.lineage else 0,
+                            bank.lineage.source_row_number if bank.lineage else 0,
+                        )
+                        if row
+                    ),
+                    (owner.bank_txn_id, bank.bank_txn_id),
                 )
             )
         else:

@@ -40,7 +40,7 @@ test("dữ liệu mẫu chuyển sang màn hình khám phá và ánh xạ", asyn
   });
   render(<App />);
   fireEvent.click(await screen.findByRole("button", { name: "Sử dụng dữ liệu mẫu" }));
-  expect(await screen.findByRole("heading", { name: "Khám phá và ánh xạ dữ liệu" })).toBeInTheDocument();
+  expect(await screen.findByRole("heading", { name: "Kiểm tra và chuẩn hóa dữ liệu" })).toBeInTheDocument();
   expect(screen.getAllByText("Trường bắt buộc", { selector: "h3" })).toHaveLength(2);
 });
 

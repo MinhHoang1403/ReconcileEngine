@@ -62,7 +62,7 @@ export function SourceWorkspace(props: Props) {
         <p className="eyebrow">ĐỐI SOÁT HAI NGUỒN · BẢO TOÀN TIỀN</p>
         <h1 id="source-title">Đối soát giao dịch tài chính</h1>
         <p>
-          Kết nối khoản phải thu với giao dịch ngân hàng hoặc PSP, kiểm tra chất lượng dữ liệu
+          Kết nối đơn hàng cần thu tiền với giao dịch thanh toán từ ngân hàng hoặc cổng thanh toán (PSP), kiểm tra chất lượng dữ liệu
           và phân bổ tiền theo bằng chứng có thể truy vết.
         </p>
       </div>
@@ -74,8 +74,8 @@ export function SourceWorkspace(props: Props) {
             <span className="required-note">2 file bắt buộc</span>
           </div>
           <div className="file-grid">
-            <FileField id="orders-file" label="Khoản phải thu" hint="CSV hoặc XLSX" file={props.ordersFile} onFile={props.onOrdersFile} />
-            <FileField id="bank-file" label="Ngân hàng / PSP" hint="CSV hoặc XLSX" file={props.bankFile} onFile={props.onBankFile} />
+            <FileField id="orders-file" label="Danh sách đơn hàng cần thu tiền" hint="CSV hoặc XLSX" file={props.ordersFile} onFile={props.onOrdersFile} />
+            <FileField id="bank-file" label="Danh sách giao dịch thanh toán" hint="CSV hoặc XLSX" file={props.bankFile} onFile={props.onBankFile} />
           </div>
           <div className="upload-requirements" aria-label="Yêu cầu upload">
             <span>CSV hoặc XLSX</span><span>Tối đa 25 MB mỗi file</span><span>Tối đa 100.000 dòng</span>
@@ -90,7 +90,7 @@ export function SourceWorkspace(props: Props) {
           <article className="surface aside-card demo-card">
             <span className="section-index">DỮ LIỆU MẪU</span>
             <h2>Khám phá nhanh SmartRecon</h2>
-            <p>Bộ VND synthetic có các ca 1:1, gộp, chia, thiếu, thừa và giao dịch mơ hồ.</p>
+            <p>Bộ dữ liệu tổng hợp bằng VND có các ca 1:1, gộp, chia, thiếu, thừa và giao dịch chưa đủ bằng chứng.</p>
             <button className="secondary accent" type="button" disabled={props.busy || !props.serviceReady} onClick={props.onDemo}>
               {props.busy ? "Đang chuẩn bị…" : "Sử dụng dữ liệu mẫu"}
             </button>
@@ -98,7 +98,7 @@ export function SourceWorkspace(props: Props) {
           <form className="surface aside-card reopen-card" onSubmit={submitReopen}>
             <span className="section-index">PHIÊN ĐÃ LƯU</span>
             <h2>Mở lại kết quả</h2>
-            <label htmlFor="run-id">Run ID</label>
+            <label htmlFor="run-id">Mã phiên đối soát</label>
             <div className="inline-form">
               <input id="run-id" placeholder="Ví dụ: d450f6b2-…" value={props.reopenId} onChange={(event) => props.onReopenId(event.target.value)} />
               <button className="secondary" type="submit" disabled={props.busy || !props.reopenId.trim()}>Mở phiên</button>

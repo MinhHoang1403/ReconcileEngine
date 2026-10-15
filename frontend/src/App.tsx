@@ -38,6 +38,7 @@ export function App() {
   const [ordersFile, setOrdersFile] = useState<File | null>(null);
   const [bankFile, setBankFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
+  const [mappingValid, setMappingValid] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -142,15 +143,15 @@ export function App() {
         {step === "mapping" && inspection && mapping && (
           <section className="page-section stack" aria-labelledby="mapping-title">
             <div className="section-heading">
-              <div><p className="eyebrow">KHÁM PHÁ CẤU TRÚC DỮ LIỆU</p><h1 id="mapping-title">Khám phá và ánh xạ dữ liệu</h1><p>Đối chiếu mẫu dữ liệu thô, sau đó xác nhận cột nguồn cho từng trường chuẩn.</p></div>
+              <div><p className="eyebrow">KIỂM TRA CẤU TRÚC DỮ LIỆU</p><h1 id="mapping-title">Kiểm tra và chuẩn hóa dữ liệu</h1><p>Tên cột trong mỗi hệ thống có thể khác nhau. Hãy ghép từng cột nguồn với đúng ý nghĩa nghiệp vụ trước khi chuẩn hóa.</p></div>
               <button className="text-button" type="button" onClick={reset}>Chọn lại nguồn</button>
             </div>
-            <div className="preview-grid"><RawPreview title="Khoản phải thu" data={inspection.raw_eda.orders} /><RawPreview title="Ngân hàng / PSP" data={inspection.raw_eda.bank_transactions} /></div>
-            <MappingEditor mapping={mapping} ordersEda={inspection.raw_eda.orders} bankEda={inspection.raw_eda.bank_transactions} onChange={setMapping} />
+            <div className="preview-grid"><RawPreview title="Danh sách đơn hàng cần thu tiền" data={inspection.raw_eda.orders} /><RawPreview title="Danh sách giao dịch thanh toán" data={inspection.raw_eda.bank_transactions} /></div>
+            <MappingEditor mapping={mapping} ordersEda={inspection.raw_eda.orders} bankEda={inspection.raw_eda.bank_transactions} onChange={setMapping} onValidityChange={setMappingValid} />
             <div className="action-bar">
-              <div><strong>Xác nhận trước khi chuẩn hóa</strong><p>Mã định danh luôn được giữ dạng chuỗi; ánh xạ chỉ có hiệu lực sau bước này.</p></div>
-              <button className="primary" type="button" disabled={busy} onClick={() => void action(() => api.confirmMapping(inspection.session_id, mapping), (value) => { setHealth(value); setStep("health"); })}>
-                {busy ? <><span className="spinner" aria-hidden="true" />Đang chuẩn hóa…</> : "Xác nhận ánh xạ"}
+              <div><strong>Xác nhận cách ghép cột trước khi chuẩn hóa</strong><p>Mã định danh được giữ dạng chuỗi. Cột bắt buộc phải đủ và mỗi cột nguồn chỉ được dùng một lần.</p></div>
+              <button className="primary" type="button" disabled={busy || !mappingValid} onClick={() => void action(() => api.confirmMapping(inspection.session_id, mapping), (value) => { setHealth(value); setStep("health"); })}>
+                {busy ? <><span className="spinner" aria-hidden="true" />Đang chuẩn hóa…</> : "Chuẩn hóa dữ liệu"}
               </button>
             </div>
           </section>
