@@ -11,7 +11,7 @@ Ngày kiểm tra: 2026-10-15. Môi trường: Windows/PowerShell, Docker Engine 
 | Python tests | `uv run pytest -q` | 58 passed; một deprecation warning từ FastAPI TestClient |
 | Golden | `uv run pytest tests/golden -q` | 26 assertions passed, phủ đúng 22 fixtures F01–F18 và F21–F24 |
 | Frontend lint | `npm run lint` | Pass |
-| Frontend unit | `npm test -- --run` | 1 passed |
+| Frontend unit | `npm run test` | 5 passed trong 3 test files |
 | Frontend build | `npm run build` | Pass; Plotly basic bundle có cảnh báo chunk lớn, không phải lỗi build |
 | Compose | `docker compose config --quiet` | Exit 0 |
 | Images | `docker compose up --build -d` | Backend và frontend build sạch, ba services healthy |
@@ -25,7 +25,11 @@ Workbook mở lại bằng OpenPyXL, đủ chín sheet theo contract; tổng `05
 
 ## Browser smoke
 
-`scripts/browser_smoke.py` dùng Microsoft Edge headless và Chrome DevTools Protocol để thao tác thật cả bốn màn hình. Kết quả cuối: title `SmartRecon`, conservation hiển thị hợp lệ, hai Plotly charts, bốn tables, export link tồn tại và bank amount đầu là `300.000 ₫`. Browser console/runtime/network không có lỗi.
+`scripts/browser_smoke.py` dùng Microsoft Edge headless và Chrome DevTools Protocol để thao tác thật cả bốn màn hình. Script chạy ở `1440x900`, `1366x768`, `768x1024` và `390x844`; mỗi lần đều đi hết demo → khám phá/ánh xạ → Health Gate → đối soát → dashboard → tải XLSX → tạo phiên mới → mở lại đúng Run ID. Kết quả: confirmed cash `66.431.000 VND`, conservation hợp lệ, hai Plotly charts, bốn tab explorer, XLSX khoảng 46 KB và không có lỗi console/runtime/network.
+
+Smoke cũng bắt buộc ghi nhận warning `POSSIBLE_REIMPORT` và chờ giao diện phản hồi `Đã ghi nhận cảnh báo` trước khi chạy engine. Regression API xác nhận mapping snapshot được kiểm tra lại qua schema khi đọc từ PostgreSQL, tránh lỗi kiểu dữ liệu currency mà không thay đổi API contract.
+
+Kiểm tra layout xác nhận `documentElement.scrollWidth <= innerWidth` ở cả bốn viewport. Font thực tế là system sans (`Segoe UI Variable Text`, `Segoe UI`, Arial), không phát sinh request đến Google Fonts; tiêu đề tiếng Việt hiển thị liền mạch. Ảnh chụp bằng chứng được sinh ngoài repository trong thư mục tạm `smartrecon-redesign-after` để không đưa artifact runtime vào Git.
 
 Kênh Windows `computer-use` đã được thử trước nhưng môi trường trả `apps: []`, `browsers: []`; vì vậy dùng Edge headless cục bộ làm fallback có thể tái lập. Smoke lần đầu đã phát hiện cột bank amount đọc sai field (0₫); lỗi đã sửa và assertion chống tái phát đã được thêm.
 
@@ -37,6 +41,16 @@ Kênh Windows `computer-use` đã được thử trước nhưng môi trường 
 - Semantic checksum và confirmed cash không đổi.
 - Dashboard mở lại, conservation vẫn `true`; export tải lại và mở được.
 - Sau restart: `db`, `backend`, `frontend` đều healthy; log scan không có `ERROR`, `Traceback`, `FATAL` hoặc `panic`.
+
+Kiểm tra lại sau đợt cải tiến giao diện với run `39f53085-d3e2-4256-b6d9-fce48c3a062a`: trước và sau `docker compose restart`, confirmed cash vẫn là `66.431.000`, conservation vẫn `true`, workbook tải lại đủ 9 sheet và toàn bộ giá trị cell giống nhau. Hash nhị phân XLSX có thể khác vì metadata thời gian khi workbook được tạo lại, nên persistence được đối chiếu theo dữ liệu workbook thay vì checksum file nén.
+
+## Cải tiến giao diện
+
+- Luồng bốn bước dùng nhãn nghiệp vụ chính xác; upload là hành động chính, dữ liệu mẫu và mở lại phiên là lựa chọn phụ.
+- EDA hiển thị số dòng/cột/ô trống/trùng lặp; mapping tách trường bắt buộc và bổ sung, giữ mã kỹ thuật ở lớp thông tin phụ.
+- Health Gate ưu tiên lỗi theo mức độ, hiển thị mã kỹ thuật trong phần mở rộng và thu lý do loại trừ ngay trong màn hình.
+- Dashboard theo thứ tự Tổng quan → Phân tích → Tra cứu → Xuất báo cáo. Explorer tìm kiếm/lọc trong đúng trang API đã tải, không thay đổi pagination hay KPI backend.
+- Focus state, semantic headings, labels, table captions, trạng thái bằng chữ và reduced-motion được bổ sung; không dùng màu làm tín hiệu duy nhất.
 
 ## Phạm vi và hạn chế đã biết
 

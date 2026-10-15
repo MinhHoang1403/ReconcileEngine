@@ -40,6 +40,17 @@ npm run build
 
 Backend host cần một `DATABASE_URL` PostgreSQL phù hợp. Migration được chạy tự động khi container backend khởi động; có thể kiểm tra thủ công bằng `uv run alembic upgrade head`.
 
+## Luồng giao diện
+
+Website tổ chức quy trình thành bốn bước: chọn nguồn dữ liệu; khám phá và ánh xạ; kiểm tra chất lượng và chạy đối soát; xem kết quả và xuất báo cáo. Dashboard sắp xếp theo Tổng quan → Phân tích → Tra cứu → Xuất báo cáo. Tìm kiếm và bộ lọc explorer chỉ áp dụng trên trang dữ liệu API đã tải, không thay đổi kết quả hay KPI phía server.
+
+Kiểm tra workflow thật bằng Edge headless, bao gồm export và mở lại phiên đã lưu:
+
+```powershell
+uv run python scripts/browser_smoke.py --width 1440 --height 900
+uv run python scripts/browser_smoke.py --width 390 --height 844
+```
+
 ## Nguyên tắc dữ liệu
 
 - Một run chỉ có một currency, tiền được tính bằng integer minor units sau khi parse `Decimal`.

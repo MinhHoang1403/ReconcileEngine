@@ -168,7 +168,8 @@ def _persist_inspection(
 
 
 def mapping_from_request(request: MappingRequest | dict[str, Any]) -> MappingConfig:
-    payload = request if isinstance(request, dict) else request.model_dump()
+    validated = request if isinstance(request, MappingRequest) else MappingRequest.model_validate(request)
+    payload = validated.model_dump()
     return MappingConfig(**payload)
 
 

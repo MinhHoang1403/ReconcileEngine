@@ -66,6 +66,16 @@ def test_demo_to_export_uses_one_persisted_run(tmp_path: Path, monkeypatch) -> N
             assert gate.status_code == 200
             assert gate.json()["report"]["status"] == "READY"
 
+            warning_codes = [
+                issue["code"] for issue in gate.json()["report"]["issues"] if issue["severity"] == "WARNING"
+            ]
+            resolution = client.post(
+                f"/api/uploads/{inspection['session_id']}/resolutions",
+                json={"exclusions": [], "acknowledged_issue_codes": warning_codes},
+            )
+            assert resolution.status_code == 200
+            assert resolution.json()["acknowledged_issue_codes"] == warning_codes
+
             created = client.post(
                 "/api/runs",
                 json={"upload_session_id": inspection["session_id"], "policy": {"currency": "VND"}},

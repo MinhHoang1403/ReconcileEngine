@@ -1,10 +1,11 @@
-"""Drive the local SmartRecon workflow through Edge's DevTools protocol."""
+"""Exercise SmartRecon in headless Edge and collect UI evidence."""
 
 from __future__ import annotations
 
 import argparse
 import base64
 import json
+import re
 import shutil
 import socket
 import subprocess
@@ -52,8 +53,7 @@ class DevTools:
 
     def evaluate(self, expression: str) -> Any:
         result = self.command(
-            "Runtime.evaluate",
-            {"expression": expression, "returnByValue": True, "awaitPromise": True},
+            "Runtime.evaluate", {"expression": expression, "returnByValue": True, "awaitPromise": True}
         )
         if result.get("exceptionDetails"):
             raise RuntimeError(result["exceptionDetails"].get("text", "Browser expression failed"))
@@ -97,7 +97,7 @@ def wait_until(devtools: DevTools, expression: str, timeout: float = 30) -> None
         if devtools.evaluate(expression):
             return
         time.sleep(0.2)
-    body = devtools.evaluate("document.body?.innerText?.slice(0, 1200)")
+    body = devtools.evaluate("document.body?.innerText?.slice(0, 1500)")
     raise TimeoutError(f"Browser condition timeout: {expression}\n{body}")
 
 
@@ -106,19 +106,30 @@ def click_button(devtools: DevTools, text: str) -> None:
     clicked = devtools.evaluate(
         "(() => { const label = "
         + encoded
-        + "; const button = [...document.querySelectorAll('button')].find((item) => "
-        "item.textContent.includes(label)); if (!button || button.disabled) return false; "
-        "button.click(); return true; })()"
+        + "; const button = [...document.querySelectorAll('button')].find((item) => item.textContent.includes(label)); "
+        "if (!button || button.disabled) return false; button.click(); return true; })()"
     )
     if not clicked:
         raise RuntimeError(f"Không click được button: {text}")
 
 
+def capture(devtools: DevTools, path: Path | None) -> None:
+    if path is None:
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    captured = devtools.command("Page.captureScreenshot", {"format": "png", "captureBeyondViewport": False})
+    path.write_bytes(base64.b64decode(captured["data"]))
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--url", default="http://localhost:5173")
-    parser.add_argument("--screenshot", type=Path)
+    parser.add_argument("--width", type=int, default=1440)
+    parser.add_argument("--height", type=int, default=900)
+    parser.add_argument("--screenshot-dir", type=Path)
+    parser.add_argument("--all-stages", action="store_true")
     args = parser.parse_args()
+
     port = free_port()
     profile = Path(tempfile.mkdtemp(prefix="smartrecon-browser-"))
     process = subprocess.Popen(
@@ -131,53 +142,121 @@ def main() -> None:
             "--remote-allow-origins=*",
             f"--remote-debugging-port={port}",
             f"--user-data-dir={profile}",
-            "--window-size=1440,1100",
+            f"--window-size={args.width},{args.height}",
             args.url,
         ],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
     devtools: DevTools | None = None
+    screenshots: list[str] = []
+    suffix = f"{args.width}x{args.height}"
+
+    def stage_path(stage: str) -> Path | None:
+        if not args.screenshot_dir or (not args.all_stages and stage != "source"):
+            return None
+        path = args.screenshot_dir / f"{stage}-{suffix}.png"
+        screenshots.append(str(path))
+        return path
+
     try:
         tab = wait_for_tab(port)
         devtools = DevTools(tab["webSocketDebuggerUrl"])
         for domain in ("Page", "Runtime", "Network", "Log"):
             devtools.command(f"{domain}.enable")
+        devtools.command(
+            "Emulation.setDeviceMetricsOverride",
+            {
+                "width": args.width,
+                "height": args.height,
+                "deviceScaleFactor": 1,
+                "mobile": args.width <= 768,
+            },
+        )
+        devtools.command("Page.reload", {"ignoreCache": True})
         wait_until(
             devtools, "document.readyState === 'complete' && document.body.innerText.includes('Hệ thống sẵn sàng')"
         )
-        click_button(devtools, "Chạy dữ liệu demo VND")
-        wait_until(devtools, "document.body.innerText.includes('Xác nhận ý nghĩa từng cột')")
-        click_button(devtools, "Xác nhận mapping")
+        capture(devtools, stage_path("source"))
+        source_evidence = devtools.evaluate(
+            "({heading: document.querySelector('h1')?.textContent, width: innerWidth, height: innerHeight, "
+            "scrollWidth: document.documentElement.scrollWidth, font: getComputedStyle(document.body).fontFamily, "
+            "externalFonts: performance.getEntriesByType('resource')"
+            ".filter(x => /fonts\\.(googleapis|gstatic)/.test(x.name)).length})"
+        )
+        assert source_evidence["heading"] == "Đối soát giao dịch tài chính"
+        assert source_evidence["scrollWidth"] <= source_evidence["width"]
+        assert source_evidence["externalFonts"] == 0
+
+        click_button(devtools, "Sử dụng dữ liệu mẫu")
+        wait_until(devtools, "document.body.innerText.includes('Khám phá và ánh xạ dữ liệu')")
+        capture(devtools, stage_path("mapping"))
+        click_button(devtools, "Xác nhận ánh xạ")
         wait_until(devtools, "document.body.innerText.includes('Dữ liệu sẵn sàng đối soát')")
+        capture(devtools, stage_path("health"))
+        click_button(devtools, "Ghi nhận cảnh báo")
+        wait_until(devtools, "document.body.innerText.includes('Đã ghi nhận cảnh báo')")
         click_button(devtools, "Chạy đối soát")
         wait_until(devtools, "document.body.innerText.includes('Kết quả đối soát')", timeout=90)
+        capture(devtools, stage_path("dashboard"))
 
         evidence = devtools.evaluate(
-            "({"
-            "title: document.title,"
-            "conservation: document.body.innerText.includes('Bất biến bảo toàn tiền đã kiểm tra'),"
-            "export_link: Boolean(document.querySelector('a[href*=\"exports?format=xlsx\"]')),"
-            "tables: document.querySelectorAll('table').length,"
-            "charts: document.querySelectorAll('.js-plotly-plot').length,"
-            "first_bank_amount: [...document.querySelectorAll('.data-card')].find(x => "
-            "x.innerText.includes('Giao dịch ngân hàng'))?.querySelector('tbody tr td:nth-child(2)')?.innerText,"
-            "run_label: [...document.querySelectorAll('.eyebrow')].map(x => x.textContent)"
-            ".find(x => x.startsWith('RUN '))"
-            "})"
+            "({title: document.title, conservation: "
+            "document.body.innerText.includes('Bảo toàn tiền đã được xác minh'), "
+            "kpiBaseline: document.body.innerText.includes('66.431.000'), "
+            "exportHref: document.querySelector('a[href*=\"exports?format=xlsx\"]')?.getAttribute('href'), "
+            "charts: document.querySelectorAll('.js-plotly-plot').length, "
+            "tabs: document.querySelectorAll('[role=tab]').length, "
+            "runLabel: [...document.querySelectorAll('.eyebrow')].map(x => x.textContent)"
+            ".find(x => x.startsWith('RUN ')), "
+            "width: innerWidth, height: innerHeight, scrollWidth: document.documentElement.scrollWidth})"
         )
         assert evidence["conservation"] is True
-        assert evidence["export_link"] is True
-        assert evidence["tables"] >= 4
+        assert evidence["kpiBaseline"] is True
         assert evidence["charts"] == 2
-        assert evidence["first_bank_amount"] not in {None, "0 ₫"}
+        assert evidence["tabs"] == 4
+        assert evidence["scrollWidth"] <= evidence["width"]
+        assert evidence["exportHref"]
+        run_id_match = re.search(r"/api/runs/([^/]+)/exports", evidence["exportHref"])
+        assert run_id_match
+        run_id = run_id_match.group(1)
+
+        export_evidence = devtools.evaluate(
+            "(async () => { const r = await fetch(document.querySelector('a[href*=\"exports?format=xlsx\"]')?.href); "
+            "const b = await r.arrayBuffer(); return {status: r.status, "
+            "type: r.headers.get('content-type'), bytes: b.byteLength}; })()"
+        )
+        assert export_evidence["status"] == 200
+        assert export_evidence["bytes"] > 1000
+
+        click_button(devtools, "Tạo phiên mới")
+        wait_until(devtools, "document.body.innerText.includes('Đối soát giao dịch tài chính')")
+        encoded_run_id = json.dumps(run_id)
+        set_value = devtools.evaluate(
+            "(() => { const input = document.querySelector('#run-id'); if (!input) return false; "
+            "const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set; "
+            f"setter.call(input, {encoded_run_id}); "
+            "input.dispatchEvent(new Event('input', {bubbles:true})); return true; })()"
+        )
+        assert set_value is True
+        click_button(devtools, "Mở phiên")
+        wait_until(devtools, "document.body.innerText.includes('Kết quả đối soát')", timeout=45)
+        reopened_href = devtools.evaluate(
+            "document.querySelector('a[href*=\"exports?format=xlsx\"]')?.getAttribute('href')"
+        )
+        assert run_id in reopened_href
+
         if devtools.failures:
             raise AssertionError(f"Browser errors: {devtools.failures}")
-        if args.screenshot:
-            args.screenshot.parent.mkdir(parents=True, exist_ok=True)
-            captured = devtools.command("Page.captureScreenshot", {"format": "png", "captureBeyondViewport": True})
-            args.screenshot.write_bytes(base64.b64decode(captured["data"]))
-            evidence["screenshot"] = str(args.screenshot)
+        evidence.update(
+            {
+                "run_id": run_id,
+                "export": export_evidence,
+                "reopen_verified": True,
+                "source": source_evidence,
+                "screenshots": screenshots,
+            }
+        )
         print(json.dumps(evidence, ensure_ascii=False))
     finally:
         if devtools:

@@ -1,22 +1,15 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { api } from "./api/client";
 import { fetchHealth } from "./api/health";
+import { AppHeader } from "./components/AppHeader";
 import { Dashboard } from "./components/Dashboard";
+import { HealthGate } from "./components/HealthGate";
 import { MappingEditor } from "./components/MappingEditor";
+import { ProgressStepper, type WorkflowStep } from "./components/ProgressStepper";
 import { RawPreview } from "./components/RawPreview";
-import type {
-  DashboardData,
-  BankRow,
-  ExceptionRow,
-  GroupRow,
-  HealthResponse,
-  Inspection,
-  MappingState,
-  OrderRow,
-} from "./types";
+import { SourceWorkspace } from "./components/SourceWorkspace";
+import type { BankRow, DashboardData, ExceptionRow, GroupRow, HealthIssue, HealthResponse, Inspection, MappingState, OrderRow } from "./types";
 import "./styles.css";
-
-type Step = "source" | "mapping" | "health" | "dashboard";
 
 const initialMapping = (inspection: Inspection): MappingState => ({
   ...inspection.suggested_mapping,
@@ -31,7 +24,7 @@ const initialMapping = (inspection: Inspection): MappingState => ({
 
 export function App() {
   const [serviceReady, setServiceReady] = useState(false);
-  const [step, setStep] = useState<Step>("source");
+  const [step, setStep] = useState<WorkflowStep>("source");
   const [inspection, setInspection] = useState<Inspection | null>(null);
   const [mapping, setMapping] = useState<MappingState | null>(null);
   const [health, setHealth] = useState<HealthResponse | null>(null);
@@ -48,20 +41,15 @@ export function App() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchHealth()
-      .then(() => setServiceReady(true))
-      .catch(() => setServiceReady(false));
+    fetchHealth().then(() => setServiceReady(true)).catch(() => setServiceReady(false));
   }, []);
 
-  const currentStep = useMemo(
-    () => ({ source: 1, mapping: 2, health: 3, dashboard: 4 })[step],
-    [step],
-  );
+  useEffect(() => {
+    document.documentElement.scrollTop = 0;
+    document.body.scrollTop = 0;
+  }, [step]);
 
-  async function action<T>(
-    operation: () => Promise<T>,
-    onSuccess: (value: T) => void | Promise<void>,
-  ) {
+  async function action<T>(operation: () => Promise<T>, onSuccess: (value: T) => void | Promise<void>) {
     setBusy(true);
     setError(null);
     try {
@@ -76,26 +64,13 @@ export function App() {
   function acceptInspection(value: Inspection) {
     setInspection(value);
     setMapping(initialMapping(value));
+    setHealth(null);
     setStep("mapping");
-  }
-
-  async function runReconciliation() {
-    if (!inspection || !mapping) return;
-    await action(
-      () => api.createRun(inspection.session_id, mapping.currency),
-      async (created) => {
-        await loadRun(created.run_id);
-      },
-    );
   }
 
   async function loadRun(id: string) {
     const [summary, groupPage, exceptionPage, orderPage, bankPage] = await Promise.all([
-      api.dashboard(id),
-      api.groups(id),
-      api.exceptions(id),
-      api.orders(id),
-      api.bankTransactions(id),
+      api.dashboard(id), api.groups(id), api.exceptions(id), api.orders(id), api.bankTransactions(id),
     ]);
     setRunId(id);
     setDashboard(summary);
@@ -106,16 +81,15 @@ export function App() {
     setStep("dashboard");
   }
 
+  async function runReconciliation() {
+    if (!inspection || !mapping) return;
+    await action(() => api.createRun(inspection.session_id, mapping.currency), (created) => loadRun(created.run_id));
+  }
+
   async function reopenRun() {
     const id = reopenId.trim();
     if (!id) return;
-    await action(
-      async () => {
-        await api.run(id);
-        return id;
-      },
-      loadRun,
-    );
+    await action(async () => { await api.run(id); return id; }, loadRun);
   }
 
   function reset() {
@@ -129,110 +103,73 @@ export function App() {
     setExceptions([]);
     setOrders([]);
     setBankTransactions([]);
+    setOrdersFile(null);
+    setBankFile(null);
     setError(null);
   }
 
-  async function excludeIssue(issue: HealthResponse["report"]["issues"][number]) {
-    if (!inspection || !health || issue.source_rows.length === 0) return;
-    const reason = window.prompt("Lý do loại trừ (bắt buộc, tối thiểu 3 ký tự):", issue.message_vi);
-    if (!reason || reason.trim().length < 3) return;
-    const additions = issue.source_rows.map((sourceRowNumber) => ({
-      feed: issue.feed,
-      source_row_number: sourceRowNumber,
-      reason: reason.trim(),
-    }));
+  async function excludeIssue(issue: HealthIssue, reason: string) {
+    if (!inspection || !health || issue.source_rows.length === 0 || reason.length < 3) return;
+    const additions = issue.source_rows.map((sourceRowNumber) => ({ feed: issue.feed, source_row_number: sourceRowNumber, reason }));
     await action(
-      () => api.resolveHealth(
-        inspection.session_id,
-        [...health.exclusions, ...additions],
-        health.acknowledged_issue_codes,
-      ),
+      () => api.resolveHealth(inspection.session_id, [...health.exclusions, ...additions], health.acknowledged_issue_codes),
       setHealth,
     );
   }
 
   async function acknowledgeWarnings() {
     if (!inspection || !health) return;
-    const warningCodes = health.report.issues
-      .filter((issue) => issue.severity === "WARNING")
-      .map((issue) => issue.code);
-    await action(
-      () => api.resolveHealth(inspection.session_id, health.exclusions, warningCodes),
-      setHealth,
-    );
+    const warningCodes = health.report.issues.filter((issue) => issue.severity === "WARNING").map((issue) => issue.code);
+    await action(() => api.resolveHealth(inspection.session_id, health.exclusions, warningCodes), setHealth);
   }
 
   return (
-    <main className="app-shell">
-      <header className="topbar">
-        <button className="brand" onClick={reset}>SMARTRECON</button>
-        <div className={`service-chip ${serviceReady ? "ready" : "offline"}`}>
-          <span />{serviceReady ? "Hệ thống sẵn sàng" : "Mất kết nối backend"}
-        </div>
-      </header>
+    <div className="app-frame">
+      <AppHeader serviceReady={serviceReady} onReset={reset} />
+      <main className="app-shell">
+        <ProgressStepper current={step} />
+        {error && <div className="error-banner" role="alert"><span>{error}</span><button type="button" onClick={() => setError(null)} aria-label="Đóng thông báo lỗi">×</button></div>}
 
-      <nav className="stepper" aria-label="Tiến trình đối soát">
-        {["Nguồn dữ liệu", "Mapping & Health", "Chạy đối soát", "Dashboard & Export"].map(
-          (label, index) => (
-            <div className={currentStep >= index + 1 ? "step active" : "step"} key={label}>
-              <span>{index + 1}</span><small>{label}</small>
-            </div>
-          ),
+        {step === "source" && (
+          <SourceWorkspace
+            serviceReady={serviceReady} busy={busy} ordersFile={ordersFile} bankFile={bankFile} reopenId={reopenId}
+            onOrdersFile={setOrdersFile} onBankFile={setBankFile} onReopenId={setReopenId}
+            onUpload={() => { if (ordersFile && bankFile) void action(() => api.inspectFiles(ordersFile, bankFile), acceptInspection); }}
+            onDemo={() => void action(api.createDemo, acceptInspection)} onReopen={() => void reopenRun()}
+          />
         )}
-      </nav>
 
-      {error && <div className="error-banner" role="alert">{error}</div>}
+        {step === "mapping" && inspection && mapping && (
+          <section className="page-section stack" aria-labelledby="mapping-title">
+            <div className="section-heading">
+              <div><p className="eyebrow">KHÁM PHÁ CẤU TRÚC DỮ LIỆU</p><h1 id="mapping-title">Khám phá và ánh xạ dữ liệu</h1><p>Đối chiếu mẫu dữ liệu thô, sau đó xác nhận cột nguồn cho từng trường chuẩn.</p></div>
+              <button className="text-button" type="button" onClick={reset}>Chọn lại nguồn</button>
+            </div>
+            <div className="preview-grid"><RawPreview title="Khoản phải thu" data={inspection.raw_eda.orders} /><RawPreview title="Ngân hàng / PSP" data={inspection.raw_eda.bank_transactions} /></div>
+            <MappingEditor mapping={mapping} ordersEda={inspection.raw_eda.orders} bankEda={inspection.raw_eda.bank_transactions} onChange={setMapping} />
+            <div className="action-bar">
+              <div><strong>Xác nhận trước khi chuẩn hóa</strong><p>Mã định danh luôn được giữ dạng chuỗi; ánh xạ chỉ có hiệu lực sau bước này.</p></div>
+              <button className="primary" type="button" disabled={busy} onClick={() => void action(() => api.confirmMapping(inspection.session_id, mapping), (value) => { setHealth(value); setStep("health"); })}>
+                {busy ? <><span className="spinner" aria-hidden="true" />Đang chuẩn hóa…</> : "Xác nhận ánh xạ"}
+              </button>
+            </div>
+          </section>
+        )}
 
-      {step === "source" && (
-        <section className="hero-grid">
-          <div className="hero-copy">
-            <p className="eyebrow">ĐỐI SOÁT HAI NGUỒN · BẢO TOÀN TIỀN</p>
-            <h1>Biến giao dịch rời rạc thành bằng chứng có thể kiểm tra.</h1>
-            <p className="intro">Upload khoản phải thu và giao dịch ngân hàng/PSP. SmartRecon chuẩn hóa, phát hiện nhóm gộp/chia, giữ nguyên residual và chỉ xác nhận khi đủ chứng cứ.</p>
-            <button className="primary large" disabled={busy || !serviceReady} onClick={() => action(api.createDemo, acceptInspection)}>
-              {busy ? "Đang chuẩn bị…" : "Chạy dữ liệu demo VND"}
-            </button>
-            <div className="reopen-panel"><input aria-label="Run ID" placeholder="Dán run ID để mở lại" value={reopenId} onChange={(event) => setReopenId(event.target.value)} /><button className="text-button" disabled={busy || !reopenId.trim()} onClick={reopenRun}>Mở run đã lưu</button></div>
-          </div>
-          <form className="upload-panel" onSubmit={(event) => {
-            event.preventDefault();
-            if (ordersFile && bankFile) action(() => api.inspectFiles(ordersFile, bankFile), acceptInspection);
-          }}>
-            <span className="overline">HOẶC DÙNG DỮ LIỆU CỦA BẠN</span>
-            <h2>Hai feed CSV / XLSX</h2>
-            <label className="file-drop"><span>Khoản phải thu</span><input type="file" accept=".csv,.xlsx" onChange={(event) => setOrdersFile(event.target.files?.[0] ?? null)} /><strong>{ordersFile?.name ?? "Chọn file orders"}</strong></label>
-            <label className="file-drop"><span>Ngân hàng / PSP</span><input type="file" accept=".csv,.xlsx" onChange={(event) => setBankFile(event.target.files?.[0] ?? null)} /><strong>{bankFile?.name ?? "Chọn file bank"}</strong></label>
-            <p className="muted">Tối đa 25 MB/file, 100.000 dòng. Raw input không bị ghi đè.</p>
-            <button className="secondary" disabled={!ordersFile || !bankFile || busy}>Kiểm tra và preview</button>
-          </form>
-        </section>
-      )}
+        {step === "health" && health && (
+          <HealthGate health={health} busy={busy} onAcknowledge={() => void acknowledgeWarnings()} onExclude={(issue, reason) => void excludeIssue(issue, reason)} onRun={() => void runReconciliation()} onBack={() => setStep("mapping")} />
+        )}
 
-      {step === "mapping" && inspection && mapping && (
-        <section className="page-section stack">
-          <div className="section-heading"><div><p className="eyebrow">RAW EDA → CANONICAL</p><h2>Xác nhận ý nghĩa từng cột</h2></div><button className="text-button" onClick={reset}>Chọn lại nguồn</button></div>
-          <div className="two-column"><RawPreview title="Khoản phải thu" data={inspection.raw_eda.orders} /><RawPreview title="Ngân hàng / PSP" data={inspection.raw_eda.bank_transactions} /></div>
-          <MappingEditor mapping={mapping} ordersEda={inspection.raw_eda.orders} bankEda={inspection.raw_eda.bank_transactions} onChange={setMapping} />
-          <div className="action-bar"><p>Mapping chỉ có hiệu lực sau khi bạn xác nhận. ID được giữ dưới dạng chuỗi.</p><button className="primary" disabled={busy} onClick={() => action(() => api.confirmMapping(inspection.session_id, mapping), (value) => { setHealth(value); setStep("health"); })}>{busy ? "Đang chuẩn hóa…" : "Xác nhận mapping"}</button></div>
-        </section>
-      )}
-
-      {step === "health" && inspection && mapping && health && (
-        <section className="page-section stack">
-          <div className="section-heading"><div><p className="eyebrow">STANDARDIZED EDA · HEALTH GATE</p><h2>{health.report.status === "READY" ? "Dữ liệu sẵn sàng đối soát" : "Cần xử lý lỗi chặn"}</h2></div><span className={`gate gate-${health.report.status.toLowerCase()}`}>{health.report.status}</span></div>
-          <div className="health-summary"><div><strong>{health.report.blocking_count}</strong><span>Blocking</span></div><div><strong>{health.report.warning_count}</strong><span>Warnings</span></div><div><strong>{health.report.info_count}</strong><span>Info</span></div><div><strong>{String(health.standardized_eda.eligible_orders_count ?? 0)}</strong><span>Orders hợp lệ</span></div><div><strong>{String(health.standardized_eda.eligible_credit_count ?? 0)}</strong><span>Bank credits</span></div></div>
-          <article className="data-card"><h3>Issues có lineage</h3><div className="issue-list">{health.report.issues.map((issue, index) => <div className="issue" key={`${issue.code}-${index}`}><span className={`severity severity-${issue.severity.toLowerCase()}`}>{issue.severity}</span><div><strong>{issue.code}</strong><p>{issue.message_vi}</p>{issue.source_rows.length > 0 && <small>Dòng nguồn: {issue.source_rows.join(", ")}</small>}{issue.severity === "BLOCKING" && issue.source_rows.length > 0 && <button className="text-button issue-action" disabled={busy} onClick={() => excludeIssue(issue)}>Loại trừ các dòng này có lý do</button>}</div></div>)}</div></article>
-          <div className="action-bar"><p>Warnings vẫn được giữ trong exceptions; proposal không đi vào confirmed KPI.</p><div className="button-row">{health.report.warning_count > 0 && <button className="secondary" disabled={busy} onClick={acknowledgeWarnings}>{health.acknowledged_issue_codes.length > 0 ? "Đã ghi nhận warnings" : "Ghi nhận warnings"}</button>}<button className="primary" disabled={busy || health.report.status !== "READY"} onClick={runReconciliation}>{busy ? "Engine đang chạy…" : "Chạy đối soát"}</button></div></div>
-        </section>
-      )}
-
-      {step === "dashboard" && dashboard && runId && (
-        <section className="page-section stack">
-          <div className="section-heading"><div><p className="eyebrow">RUN {runId.slice(0, 8)} · REVISION {dashboard.effective_revision}</p><h2>Kết quả đối soát</h2></div><div className="button-row"><a className="secondary link-button" href={`/api/runs/${runId}/exports?format=xlsx`}>Tải Excel</a><button className="text-button" onClick={reset}>Tạo phiên mới</button></div></div>
-          <div className={`conservation ${dashboard.conservation.is_valid ? "valid" : "invalid"}`}>{dashboard.conservation.is_valid ? "✓ Bất biến bảo toàn tiền đã kiểm tra: 0 vi phạm" : `Có vi phạm: ${dashboard.conservation.violations.join(", ")}`}</div>
-          <Dashboard data={dashboard} groups={groups} exceptions={exceptions} orders={orders} bankTransactions={bankTransactions} />
-        </section>
-      )}
-    </main>
+        {step === "dashboard" && dashboard && runId && (
+          <section className="page-section stack" aria-labelledby="dashboard-title">
+            <div className="section-heading dashboard-heading">
+              <div><p className="eyebrow">RUN {runId.slice(0, 8)} · REVISION {dashboard.effective_revision}</p><h1 id="dashboard-title">Kết quả đối soát</h1><p>Tổng quan, phân tích và bằng chứng truy vết của phiên hiện tại.</p></div>
+              <button className="secondary" type="button" onClick={reset}>Tạo phiên mới</button>
+            </div>
+            <Dashboard data={dashboard} groups={groups} exceptions={exceptions} orders={orders} bankTransactions={bankTransactions} runId={runId} />
+          </section>
+        )}
+      </main>
+    </div>
   );
 }
