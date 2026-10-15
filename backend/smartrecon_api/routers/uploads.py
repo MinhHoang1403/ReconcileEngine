@@ -21,6 +21,7 @@ from backend.smartrecon_api.services.uploads import (
     confirm_mapping,
     create_demo_session,
     create_upload_session,
+    health_issue_detail,
     save_upload,
 )
 from smartrecon.ingest.readers import InputFileError, read_source_bundle
@@ -104,6 +105,23 @@ def get_health(session_id: str, db: Session = Depends(get_db)) -> dict:
             detail={"error_code": "MAPPING_REQUIRED", "message": "Cần xác nhận mapping trước."},
         )
     return session.health_snapshot | {"session_id": session.id, "status": session.status}
+
+
+@router.get("/uploads/{session_id}/health/issues/{issue_index}")
+def get_health_issue_detail(session_id: str, issue_index: int, db: Session = Depends(get_db)) -> dict:
+    session = _session_or_404(db, session_id)
+    if session.health_snapshot is None:
+        raise HTTPException(
+            status_code=409,
+            detail={"error_code": "MAPPING_REQUIRED", "message": "Cần chuẩn hóa dữ liệu trước."},
+        )
+    try:
+        return health_issue_detail(session, issue_index)
+    except LookupError as exc:
+        raise HTTPException(
+            status_code=404,
+            detail={"error_code": "HEALTH_ISSUE_NOT_FOUND", "message": "Không tìm thấy vấn đề dữ liệu."},
+        ) from exc
 
 
 @router.post("/uploads/{session_id}/resolutions", response_model=HealthResponse)

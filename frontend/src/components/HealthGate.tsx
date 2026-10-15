@@ -1,5 +1,7 @@
 import { useMemo, useState } from "react";
-import type { HealthIssue, HealthResponse } from "../types";
+import { api } from "../api/client";
+import type { HealthIssue, HealthIssueDetail, HealthResponse } from "../types";
+import { DetailDrawer } from "./DetailDrawer";
 
 type Props = {
   health: HealthResponse;
@@ -16,6 +18,8 @@ const severityLabels = { BLOCKING: "Chặn", WARNING: "Cảnh báo", INFO: "Thô
 export function HealthGate({ health, busy, onAcknowledge, onExclude, onRun, onBack }: Props) {
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [reason, setReason] = useState("");
+  const [detail, setDetail] = useState<HealthIssueDetail | null>(null);
+  const [detailError, setDetailError] = useState<string | null>(null);
   const issues = useMemo(
     () => [...health.report.issues].sort((a, b) => severityOrder[a.severity] - severityOrder[b.severity]),
     [health.report.issues],
@@ -80,6 +84,14 @@ export function HealthGate({ health, busy, onAcknowledge, onExclude, onRun, onBa
                       <code>{issue.code}</code> · feed <code>{issue.feed}</code>
                       {issue.sample_values.length > 0 && <p>Giá trị mẫu: {issue.sample_values.join(", ")}</p>}
                     </details>
+                    {issue.source_rows.length > 0 && (
+                      <button className="text-button issue-action" type="button" disabled={busy} onClick={() => {
+                        setDetailError(null);
+                        void api.healthIssueDetail(health.session_id, index).then(setDetail).catch((error: Error) => setDetailError(error.message));
+                      }}>
+                        Xem dòng dữ liệu liên quan
+                      </button>
+                    )}
                     {issue.severity === "BLOCKING" && issue.source_rows.length > 0 && !isEditing && (
                       <button className="text-button issue-action" type="button" disabled={busy} onClick={() => { setEditingKey(key); setReason(""); }}>
                         Loại trừ các dòng này
@@ -128,6 +140,28 @@ export function HealthGate({ health, busy, onAcknowledge, onExclude, onRun, onBa
           </button>
         </div>
       </div>
+      {detail && (
+        <DetailDrawer title="Chi tiết vấn đề dữ liệu" subtitle={detail.message_vi} onClose={() => setDetail(null)}>
+          <div className="detail-summary-grid">
+            <div><span>Mức độ</span><strong>{severityLabels[detail.severity]}</strong></div>
+            <div><span>Nguồn dữ liệu</span><strong>{detail.feed === "orders" ? "Đơn hàng" : "Giao dịch thanh toán"}</strong></div>
+            <div><span>Mã lý do</span><strong>{detail.code}</strong></div>
+            <div><span>Số dòng liên quan</span><strong>{detail.row_count}</strong></div>
+          </div>
+          <section className="drawer-section"><h3>Hướng xử lý đề xuất</h3><p>{detail.suggested_action_vi}</p></section>
+          {detail.rows.map((row) => (
+            <section className="drawer-section source-record" key={row.source_row_number}>
+              <h3>{row.source_filename ?? "File nguồn"} · dòng {row.source_row_number}</h3>
+              {row.sheet_name && <p>Sheet: {row.sheet_name}</p>}
+              <dl className="record-grid">{Object.entries(row.raw_values).map(([key, value]) => <div key={key}><dt>{key}</dt><dd>{String(value ?? "") || "—"}</dd></div>)}</dl>
+              {row.normalized_values && <details><summary>Dữ liệu đã chuẩn hóa</summary><pre>{JSON.stringify(row.normalized_values, null, 2)}</pre></details>}
+              <details><summary>Thông tin truy vết kỹ thuật</summary><code>{row.source_row_hash ?? "Không có hash vì dòng không chuẩn hóa được"}</code></details>
+            </section>
+          ))}
+          {detail.is_truncated && <p className="drawer-note">Chỉ hiển thị 50 dòng đầu tiên để giữ phản hồi an toàn.</p>}
+        </DetailDrawer>
+      )}
+      {detailError && <div className="error-banner" role="alert"><span>{detailError}</span><button type="button" onClick={() => setDetailError(null)}>×</button></div>}
     </section>
   );
 }

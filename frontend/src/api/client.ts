@@ -4,6 +4,7 @@ import type {
   ExceptionRow,
   GroupRow,
   HealthResponse,
+  HealthIssueDetail,
   Inspection,
   MappingState,
   OrderRow,
@@ -57,6 +58,8 @@ export const api = {
       headers: jsonHeaders,
       body: JSON.stringify({ exclusions, acknowledged_issue_codes: acknowledgedIssueCodes }),
     }),
+  healthIssueDetail: (sessionId: string, issueIndex: number) =>
+    requestJson<HealthIssueDetail>(`/api/uploads/${sessionId}/health/issues/${issueIndex}`),
   createRun: (sessionId: string, currency: "VND" | "BRL") =>
     requestJson<RunCreated>("/api/runs", {
       method: "POST",

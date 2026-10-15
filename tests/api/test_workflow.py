@@ -65,6 +65,19 @@ def test_demo_to_export_uses_one_persisted_run(tmp_path: Path, monkeypatch) -> N
             gate = client.post(f"/api/uploads/{inspection['session_id']}/mapping", json=mapping)
             assert gate.status_code == 200
             assert gate.json()["report"]["status"] == "READY"
+            duplicate_index = next(
+                index
+                for index, issue in enumerate(gate.json()["report"]["issues"])
+                if issue["code"] == "POSSIBLE_REIMPORT"
+            )
+            detail = client.get(f"/api/uploads/{inspection['session_id']}/health/issues/{duplicate_index}")
+            assert detail.status_code == 200
+            assert detail.json()["code"] == "POSSIBLE_REIMPORT"
+            assert len(detail.json()["rows"]) == 2
+            assert all(row["source_filename"] == "bank.csv" for row in detail.json()["rows"])
+            assert client.get(f"/api/uploads/{inspection['session_id']}/health/issues/999").status_code == 404
+            unchanged = client.get(f"/api/uploads/{inspection['session_id']}/health")
+            assert unchanged.json()["report"] == gate.json()["report"]
 
             warning_codes = [
                 issue["code"] for issue in gate.json()["report"]["issues"] if issue["severity"] == "WARNING"

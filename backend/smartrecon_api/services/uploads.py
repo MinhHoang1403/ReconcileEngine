@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import shutil
+from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -189,7 +190,8 @@ def load_raw_bundle(session: UploadSession) -> RawSourceBundle:
 
 def confirm_mapping(db: Session, session: UploadSession, request: MappingRequest) -> dict[str, Any]:
     mapping = mapping_from_request(request)
-    normalized = normalize_bundle(load_raw_bundle(session), mapping)
+    raw = load_raw_bundle(session)
+    normalized = normalize_bundle(raw, mapping)
     report = build_health_report(normalized)
     standardized = summarize_standardized(
         list(normalized.orders), list(normalized.bank_transactions), mapping.currency.value
@@ -200,6 +202,7 @@ def confirm_mapping(db: Session, session: UploadSession, request: MappingRequest
         "exclusions": [],
         "acknowledged_issue_codes": [],
         "standardized_eda": eda_to_dict(standardized),
+        "issue_details": _health_issue_details(raw, normalized, report, session.source_manifest),
     }
     session.status = "HEALTH_READY" if report.status == "READY" else "HEALTH_BLOCKED"
     db.commit()
@@ -217,7 +220,8 @@ def normalize_session(session: UploadSession) -> tuple[NormalizedBundle, Any]:
 
 
 def apply_resolution(db: Session, session: UploadSession, request: ResolutionRequest) -> dict[str, Any]:
-    normalized = normalize_bundle(load_raw_bundle(session), mapping_from_request(session.mapping_snapshot or {}))
+    raw = load_raw_bundle(session)
+    normalized = normalize_bundle(raw, mapping_from_request(session.mapping_snapshot or {}))
     exclusions = [Exclusion(**item.model_dump()) for item in request.exclusions]
     resolved, report = apply_exclusions(normalized, exclusions)
     mapping = mapping_from_request(session.mapping_snapshot or {})
@@ -229,7 +233,88 @@ def apply_resolution(db: Session, session: UploadSession, request: ResolutionReq
         "exclusions": to_jsonable(exclusions),
         "acknowledged_issue_codes": sorted(set(request.acknowledged_issue_codes)),
         "standardized_eda": eda_to_dict(standardized),
+        "issue_details": _health_issue_details(raw, resolved, report, session.source_manifest),
     }
     session.status = "HEALTH_READY" if report.status == "READY" else "HEALTH_BLOCKED"
     db.commit()
     return session.health_snapshot | {"session_id": session.id, "status": session.status}
+
+
+def health_issue_detail(session: UploadSession, issue_index: int) -> dict[str, Any]:
+    """Return a bounded detail snapshot produced during mapping, never an arbitrary file path."""
+    details = (session.health_snapshot or {}).get("issue_details", [])
+    if issue_index < 0 or issue_index >= len(details):
+        raise LookupError("HEALTH_ISSUE_NOT_FOUND")
+    return details[issue_index]
+
+
+def _health_issue_details(
+    raw: RawSourceBundle,
+    normalized: NormalizedBundle,
+    report: Any,
+    manifest: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Persist at most 50 related rows per issue while the full mapping pass is already in memory."""
+    canonical_by_row: dict[tuple[str, int], dict[str, Any]] = {}
+    for feed, records in (("orders", normalized.orders), ("bank_transactions", normalized.bank_transactions)):
+        for record in records:
+            if record.lineage:
+                canonical_by_row[(feed, record.lineage.source_row_number)] = to_jsonable(asdict(record))
+
+    file_meta = manifest.get("files", {})
+    tables = {"orders": raw.orders, "bank_transactions": raw.bank_transactions}
+    actions = {
+        "POSSIBLE_REIMPORT": (
+            "So sánh hai dòng nguồn và mã giao dịch; chỉ loại trừ khi xác minh "
+            "đây là cùng một giao dịch nhập lặp."
+        ),
+        "MISSING_REFERENCE_EVIDENCE": (
+            "Bổ sung mã tham chiếu hoặc nội dung giao dịch nếu nguồn có dữ liệu; "
+            "nếu không, giao dịch chỉ được đề xuất ghép."
+        ),
+        "ORDER_ID_COLLISION": "Sửa mã đơn hàng hoặc cấu hình khóa ghép có thể phân biệt từng nghĩa vụ.",
+        "BANK_ID_COLLISION": "Sửa mã giao dịch bị trùng trước khi chạy đối soát.",
+        "ORDER_PARSE_ERROR": "Sửa giá trị sai định dạng trong file nguồn hoặc loại trừ dòng kèm lý do nghiệp vụ.",
+        "BANK_PARSE_ERROR": "Sửa giá trị sai định dạng trong file nguồn hoặc loại trừ dòng kèm lý do nghiệp vụ.",
+        "CURRENCY_MISMATCH": "Tách dữ liệu theo loại tiền hoặc sửa cột loại tiền đã ghép.",
+    }
+    details: list[dict[str, Any]] = []
+    for issue_index, issue in enumerate(report.issues):
+        table = tables.get(issue.feed)
+        rows: list[dict[str, Any]] = []
+        for row_number in issue.source_rows[:50]:
+            raw_values: dict[str, Any] = {}
+            if table is not None and 2 <= row_number <= len(table.frame) + 1:
+                raw_values = {
+                    str(key): str(value) if value is not None else ""
+                    for key, value in table.frame.iloc[row_number - 2].items()
+                }
+            normalized_values = canonical_by_row.get((issue.feed, row_number))
+            rows.append(
+                {
+                    "source_row_number": row_number,
+                    "source_filename": file_meta.get("orders" if issue.feed == "orders" else "bank", {}).get("name"),
+                    "sheet_name": table.sheet_name if table is not None else None,
+                    "raw_values": raw_values,
+                    "normalized_values": normalized_values,
+                    "source_row_hash": (normalized_values or {}).get("lineage", {}).get("source_row_hash"),
+                }
+            )
+        details.append(
+            {
+                "issue_index": issue_index,
+                "code": issue.code,
+                "severity": issue.severity.value,
+                "feed": issue.feed,
+                "message_vi": issue.message_vi,
+                "sample_values": list(issue.sample_values),
+                "suggested_action_vi": actions.get(
+                    issue.code,
+                    "Kiểm tra dữ liệu nguồn và cách ghép cột; việc xem chi tiết không thay đổi dữ liệu.",
+                ),
+                "rows": rows,
+                "row_count": len(issue.source_rows),
+                "is_truncated": len(issue.source_rows) > 50,
+            }
+        )
+    return details

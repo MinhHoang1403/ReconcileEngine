@@ -52,6 +52,26 @@ export type HealthResponse = {
   acknowledged_issue_codes: string[];
 };
 
+export type HealthIssueDetail = {
+  issue_index: number;
+  code: string;
+  severity: HealthIssue["severity"];
+  feed: string;
+  message_vi: string;
+  sample_values: string[];
+  suggested_action_vi: string;
+  row_count: number;
+  is_truncated: boolean;
+  rows: {
+    source_row_number: number;
+    source_filename: string | null;
+    sheet_name: string | null;
+    source_row_hash: string | null;
+    raw_values: Record<string, unknown>;
+    normalized_values: Record<string, unknown> | null;
+  }[];
+};
+
 export type RunCreated = {
   run_id: string;
   status: string;
