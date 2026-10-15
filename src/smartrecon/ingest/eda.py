@@ -37,10 +37,7 @@ class StandardizedEda:
 
 def summarize_raw(table: RawTable, sample_size: int = 20) -> RawEda:
     frame = table.frame
-    missing = {
-        str(column): int(frame[column].astype("string").str.strip().eq("").sum())
-        for column in frame.columns
-    }
+    missing = {str(column): int(frame[column].astype("string").str.strip().eq("").sum()) for column in frame.columns}
     sample = tuple(frame.head(sample_size).astype(object).to_dict(orient="records"))
     return RawEda(
         row_count=len(frame),

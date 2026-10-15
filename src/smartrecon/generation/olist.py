@@ -71,18 +71,14 @@ def prepare_olist_derived_sample(
     totals = payments.groupby("order_id", as_index=False)["payment_value"].sum()
     eligible = orders.loc[orders["order_status"].eq("delivered")].merge(totals, on="order_id")
     if len(eligible) < sample_size:
-        raise OlistInputError(
-            f"Không đủ {sample_size} delivered orders có payment; chỉ có {len(eligible)}"
-        )
+        raise OlistInputError(f"Không đủ {sample_size} delivered orders có payment; chỉ có {len(eligible)}")
 
     selected = eligible.sample(n=sample_size, random_state=seed).sort_values("order_id")
     rng = random.Random(seed)
     canonical_orders: list[dict[str, Any]] = []
     synthetic_bank: list[dict[str, Any]] = []
     for index, row in enumerate(selected.itertuples(index=False), start=1):
-        amount_minor = int(
-            (Decimal(str(row.payment_value)) * 100).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
-        )
+        amount_minor = int((Decimal(str(row.payment_value)) * 100).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
         ordered_at = pd.Timestamp(row.order_purchase_timestamp)
         canonical_orders.append(
             {

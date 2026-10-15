@@ -117,9 +117,7 @@ class ArtifactManifest(Base):
     __tablename__ = "artifact_manifest"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    run_id: Mapped[str | None] = mapped_column(
-        ForeignKey("runs.id", ondelete="CASCADE"), index=True
-    )
+    run_id: Mapped[str | None] = mapped_column(ForeignKey("runs.id", ondelete="CASCADE"), index=True)
     upload_session_id: Mapped[str | None] = mapped_column(
         ForeignKey("upload_sessions.id", ondelete="CASCADE"), index=True
     )

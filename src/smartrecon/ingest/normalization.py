@@ -95,9 +95,7 @@ def _validate_mapping(
                 f"Chưa map trường bắt buộc: {', '.join(missing_mapping)}",
             )
         )
-    absent_columns = sorted(
-        {source for source in columns.values() if source not in table.frame.columns}
-    )
+    absent_columns = sorted({source for source in columns.values() if source not in table.frame.columns})
     if absent_columns:
         issues.append(
             DataIssue(
@@ -113,9 +111,7 @@ def _validate_mapping(
 def normalize_bundle(raw: RawSourceBundle, mapping: MappingConfig) -> NormalizedBundle:
     """Create canonical rows, retaining all row-level parse failures for Health Gate."""
     issues = _validate_mapping(raw.orders, mapping.order_columns, ORDER_REQUIRED, "orders")
-    issues += _validate_mapping(
-        raw.bank_transactions, mapping.bank_columns, BANK_REQUIRED, "bank_transactions"
-    )
+    issues += _validate_mapping(raw.bank_transactions, mapping.bank_columns, BANK_REQUIRED, "bank_transactions")
     if any(issue.severity is Severity.BLOCKING for issue in issues):
         return NormalizedBundle(
             (),
@@ -147,15 +143,13 @@ def normalize_bundle(raw: RawSourceBundle, mapping: MappingConfig) -> Normalized
                 decimal_separator=mapping.decimal_separator,
                 thousand_separator=mapping.thousand_separator,
             )
-            status_raw = _optional(
-                row, mapping.order_columns, "order_status"
-            ) or mapping.order_defaults.get("order_status", "")
+            status_raw = _optional(row, mapping.order_columns, "order_status") or mapping.order_defaults.get(
+                "order_status", ""
+            )
             orders.append(
                 Order(
                     order_id=order_id,
-                    ordered_at=_parse_date(
-                        row[mapping.order_columns["ordered_at"]], mapping.date_format
-                    ),
+                    ordered_at=_parse_date(row[mapping.order_columns["ordered_at"]], mapping.date_format),
                     expected_amount_minor=amount,
                     currency=currency,
                     order_status=OrderStatus(status_raw.upper()),
@@ -210,12 +204,8 @@ def normalize_bundle(raw: RawSourceBundle, mapping: MappingConfig) -> Normalized
                 BankTransaction(
                     bank_txn_id=bank_id,
                     txn_ref=_optional(row, mapping.bank_columns, "txn_ref"),
-                    txn_date=_parse_date(
-                        row[mapping.bank_columns["txn_date"]], mapping.date_format
-                    ),
-                    value_date=(
-                        _parse_date(value_date_raw, mapping.date_format) if value_date_raw else None
-                    ),
+                    txn_date=_parse_date(row[mapping.bank_columns["txn_date"]], mapping.date_format),
+                    value_date=(_parse_date(value_date_raw, mapping.date_format) if value_date_raw else None),
                     posted_amount_minor=amount,
                     direction=Direction(
                         (
@@ -235,9 +225,7 @@ def normalize_bundle(raw: RawSourceBundle, mapping: MappingConfig) -> Normalized
                     channel=_optional(row, mapping.bank_columns, "channel"),
                     batch_ref=_optional(row, mapping.bank_columns, "batch_ref"),
                     declared_fee_minor=declared_fee,
-                    lineage=SourceLineage(
-                        raw.bank_transactions.source_file_id, row_number, row_digest
-                    ),
+                    lineage=SourceLineage(raw.bank_transactions.source_file_id, row_number, row_digest),
                 )
             )
         except (KeyError, ValueError, MoneyParseError) as exc:
@@ -250,9 +238,7 @@ def normalize_bundle(raw: RawSourceBundle, mapping: MappingConfig) -> Normalized
                     (row_number,),
                 )
             )
-            rejected.append(
-                RejectedRow("bank_transactions", row_number, row_digest, "BANK_PARSE_ERROR")
-            )
+            rejected.append(RejectedRow("bank_transactions", row_number, row_digest, "BANK_PARSE_ERROR"))
 
     duplicate_ids = _add_semantic_issues(orders, banks, issues)
     return NormalizedBundle(
@@ -268,16 +254,12 @@ def normalize_bundle(raw: RawSourceBundle, mapping: MappingConfig) -> Normalized
     )
 
 
-def _row_currency(
-    row: pd.Series, columns: dict[str, str], configured_currency: Currency
-) -> Currency:
+def _row_currency(row: pd.Series, columns: dict[str, str], configured_currency: Currency) -> Currency:
     raw = _optional(row, columns, "currency")
     return Currency(raw.upper()) if raw else configured_currency
 
 
-def _add_semantic_issues(
-    orders: list[Order], banks: list[BankTransaction], issues: list[DataIssue]
-) -> set[str]:
+def _add_semantic_issues(orders: list[Order], banks: list[BankTransaction], issues: list[DataIssue]) -> set[str]:
     duplicate_bank_ids: set[str] = set()
     order_ids: dict[str, list[int]] = {}
     for order in orders:
@@ -298,9 +280,7 @@ def _add_semantic_issues(
     bank_ids: dict[str, list[int]] = {}
     fingerprint_owner: dict[tuple[str | None, int, date, Direction], BankTransaction] = {}
     for bank in banks:
-        bank_ids.setdefault(bank.bank_txn_id, []).append(
-            bank.lineage.source_row_number if bank.lineage else 0
-        )
+        bank_ids.setdefault(bank.bank_txn_id, []).append(bank.lineage.source_row_number if bank.lineage else 0)
         fingerprint = (bank.txn_ref, bank.posted_amount_minor, bank.txn_date, bank.direction)
         owner = fingerprint_owner.get(fingerprint)
         if owner and owner.bank_txn_id != bank.bank_txn_id:

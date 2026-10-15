@@ -34,9 +34,7 @@ def test_csv_and_xlsx_normalize_to_the_same_semantics() -> None:
     xlsx_normalized = normalize_bundle(xlsx_bundle, mapping)
 
     def order_semantics(rows):
-        return [
-            (row.order_id, row.ordered_at, row.expected_amount_minor, row.currency) for row in rows
-        ]
+        return [(row.order_id, row.ordered_at, row.expected_amount_minor, row.currency) for row in rows]
 
     def bank_semantics(rows):
         return [
@@ -51,9 +49,7 @@ def test_csv_and_xlsx_normalize_to_the_same_semantics() -> None:
         ]
 
     assert order_semantics(csv_normalized.orders) == order_semantics(xlsx_normalized.orders)
-    assert bank_semantics(csv_normalized.bank_transactions) == bank_semantics(
-        xlsx_normalized.bank_transactions
-    )
+    assert bank_semantics(csv_normalized.bank_transactions) == bank_semantics(xlsx_normalized.bank_transactions)
     assert csv_normalized.duplicate_bank_ids == ("TXN00013-B",)
     assert not [issue for issue in csv_normalized.issues if issue.severity is Severity.BLOCKING]
 
@@ -111,9 +107,7 @@ def test_health_reports_duplicate_as_warning_not_silent_drop() -> None:
     assert duplicate_issue.severity is Severity.WARNING
     assert len(normalized.bank_transactions) == 98
 
-    duplicate_bank = next(
-        bank for bank in normalized.bank_transactions if bank.bank_txn_id == "TXN00013-B"
-    )
+    duplicate_bank = next(bank for bank in normalized.bank_transactions if bank.bank_txn_id == "TXN00013-B")
     resolved, resolved_report = apply_exclusions(
         normalized,
         [
@@ -183,9 +177,7 @@ def test_bad_amount_and_currency_mismatch_block_health(tmp_path: Path) -> None:
         },
         currency=Currency.VND,
     )
-    normalized = normalize_bundle(
-        read_source_bundle(orders_path=orders_path, bank_path=bank_path), mapping
-    )
+    normalized = normalize_bundle(read_source_bundle(orders_path=orders_path, bank_path=bank_path), mapping)
     report = build_health_report(normalized)
 
     assert report.status == "BLOCKED"

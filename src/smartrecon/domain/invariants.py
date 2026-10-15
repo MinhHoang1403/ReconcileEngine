@@ -92,14 +92,8 @@ def check_conservation(
     if total_bank != total_allocated + sum(bank_unapplied.values()):
         violations.append("RUN_BANK_CONSERVATION")
 
-    total_orders = sum(
-        order.expected_amount_minor
-        for order in orders
-        if order.order_status is OrderStatus.ELIGIBLE
-    )
-    if total_orders != (
-        total_allocated + sum(order_adjusted.values()) + sum(order_outstanding.values())
-    ):
+    total_orders = sum(order.expected_amount_minor for order in orders if order.order_status is OrderStatus.ELIGIBLE)
+    if total_orders != (total_allocated + sum(order_adjusted.values()) + sum(order_outstanding.values())):
         violations.append("RUN_ORDER_CONSERVATION")
 
     return ConservationReport(

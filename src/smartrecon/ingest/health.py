@@ -27,16 +27,12 @@ class HealthReport:
     excluded_rows: tuple[Exclusion, ...] = ()
 
 
-def build_health_report(
-    normalized: NormalizedBundle, excluded_rows: tuple[Exclusion, ...] = ()
-) -> HealthReport:
+def build_health_report(normalized: NormalizedBundle, excluded_rows: tuple[Exclusion, ...] = ()) -> HealthReport:
     """Project severity counts; only unresolved blocking issues close the gate."""
     excluded_keys = {(item.feed, item.source_row_number) for item in excluded_rows}
     effective_issues: list[DataIssue] = []
     for issue in normalized.issues:
-        if issue.source_rows and all(
-            (issue.feed, row_number) in excluded_keys for row_number in issue.source_rows
-        ):
+        if issue.source_rows and all((issue.feed, row_number) in excluded_keys for row_number in issue.source_rows):
             continue
         effective_issues.append(issue)
 
@@ -74,9 +70,7 @@ def apply_exclusions(
         normalized.issues,
         normalized.rejected_rows,
         tuple(
-            bank_id
-            for bank_id in normalized.duplicate_bank_ids
-            if any(bank.bank_txn_id == bank_id for bank in banks)
+            bank_id for bank_id in normalized.duplicate_bank_ids if any(bank.bank_txn_id == bank_id for bank in banks)
         ),
         normalized.source_hashes,
     )

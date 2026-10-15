@@ -173,9 +173,7 @@ def _case(
 
 
 def _semantic_hash(payload: object) -> str:
-    encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode(
-        "utf-8"
-    )
+    encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
 
 
@@ -346,9 +344,7 @@ def generate_vnd_demo(seed: int = 42, order_count: int = 100) -> DemoBundle:
         "UNKNOWN",
         "Eligible credit with no receivable counterpart",
     )
-    duplicate_bank_a = _bank(
-        "TXN00013-A", 120_000, 13, "Thanh toan ORD00015", txn_ref="BANK-STABLE-13"
-    )
+    duplicate_bank_a = _bank("TXN00013-A", 120_000, 13, "Thanh toan ORD00015", txn_ref="BANK-STABLE-13")
     duplicate_bank_b = dict(duplicate_bank_a, bank_txn_id="TXN00013-B")
     add_case(
         "F13",
@@ -526,8 +522,7 @@ def generate_vnd_demo(seed: int = 42, order_count: int = 100) -> DemoBundle:
             "truth_cases": _semantic_hash(cases),
         },
         "reproducibility": (
-            "CSV and semantic payloads are deterministic for seed/config; "
-            "XLSX is semantically equivalent."
+            "CSV and semantic payloads are deterministic for seed/config; XLSX is semantically equivalent."
         ),
     }
     _assert_truth_isolated(orders, banks)
@@ -542,12 +537,8 @@ def _scenario_counts(cases: list[dict[str, Any]]) -> dict[str, int]:
     return dict(sorted(counts.items()))
 
 
-def _assert_truth_isolated(
-    orders: list[dict[str, Any]], bank_transactions: list[dict[str, Any]]
-) -> None:
-    leaked = (set(orders[0]) if orders else set()) | (
-        set(bank_transactions[0]) if bank_transactions else set()
-    )
+def _assert_truth_isolated(orders: list[dict[str, Any]], bank_transactions: list[dict[str, Any]]) -> None:
+    leaked = (set(orders[0]) if orders else set()) | (set(bank_transactions[0]) if bank_transactions else set())
     forbidden = sorted(leaked & BUSINESS_TRUTH_DENYLIST)
     if forbidden:
         raise AssertionError(f"Truth fields leaked into business feeds: {forbidden}")
@@ -569,7 +560,13 @@ def _append_sheet(
     sheet = workbook.create_sheet(title)
     sheet.append(columns)
     for row in rows:
-        sheet.append([row[column] for column in columns])
+        values = [row[column] for column in columns]
+        sheet.append(values)
+        for column_index, value in enumerate(values, start=1):
+            if isinstance(value, str) and value.startswith(("=", "+", "-", "@")):
+                # The demo input must contain the literal hostile text so export
+                # sanitization can be tested; it must not become a workbook formula.
+                sheet.cell(sheet.max_row, column_index).data_type = "s"
     sheet.freeze_panes = "A2"
     sheet.auto_filter.ref = sheet.dimensions
 

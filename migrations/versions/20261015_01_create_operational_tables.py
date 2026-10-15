@@ -115,9 +115,7 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index("ix_artifact_manifest_run_id", "artifact_manifest", ["run_id"])
-    op.create_index(
-        "ix_artifact_manifest_upload_session_id", "artifact_manifest", ["upload_session_id"]
-    )
+    op.create_index("ix_artifact_manifest_upload_session_id", "artifact_manifest", ["upload_session_id"])
 
 
 def downgrade() -> None:

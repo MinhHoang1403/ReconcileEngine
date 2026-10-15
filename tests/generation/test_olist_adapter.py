@@ -27,10 +27,7 @@ def test_olist_adapter_labels_bank_feed_synthetic(tmp_path: Path) -> None:
 
     amounts = {row["order_id"]: row["expected_amount_minor"] for row in bundle.orders}
     assert amounts == {"olist-a": 1250, "olist-b": 2000}
-    assert all(
-        row["source_semantics"] == "synthetic_not_bank_statement"
-        for row in bundle.bank_transactions
-    )
+    assert all(row["source_semantics"] == "synthetic_not_bank_statement" for row in bundle.bank_transactions)
     assert bundle.provenance["profile"] == "olist_derived_demo"
 
 
