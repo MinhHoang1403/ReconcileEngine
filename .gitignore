@@ -1,4 +1,6 @@
 .env
+.env.*
+!.env.example
 .venv/
 __pycache__/
 *.py[cod]
@@ -23,4 +25,3 @@ reports/
 *.log
 .DS_Store
 Thumbs.db
-

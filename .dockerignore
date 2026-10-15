@@ -11,5 +11,6 @@ data/raw
 data/benchmark
 reports
 .env
+.env.*
+!.env.example
 *.log
-
