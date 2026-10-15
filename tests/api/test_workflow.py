@@ -89,6 +89,17 @@ def test_demo_to_export_uses_one_persisted_run(tmp_path: Path, monkeypatch) -> N
             assert resolution.status_code == 200
             assert resolution.json()["acknowledged_issue_codes"] == warning_codes
 
+            invalid_feed = client.post(
+                f"/api/uploads/{inspection['session_id']}/resolutions",
+                json={"exclusions": [{"feed": "unknown", "source_row_number": 2, "reason": "Không hợp lệ"}]},
+            )
+            assert invalid_feed.status_code == 422
+            missing_row = client.post(
+                f"/api/uploads/{inspection['session_id']}/resolutions",
+                json={"exclusions": [{"feed": "orders", "source_row_number": 999999, "reason": "Dòng không tồn tại"}]},
+            )
+            assert missing_row.status_code == 422
+
             created = client.post(
                 "/api/runs",
                 json={"upload_session_id": inspection["session_id"], "policy": {"currency": "VND"}},
@@ -233,6 +244,8 @@ def test_demo_to_export_uses_one_persisted_run(tmp_path: Path, monkeypatch) -> N
     assert order_sheet.auto_filter.ref == f"A1:U{order_sheet.max_row}"
     assert fee_order[order_headers.index("Mã giao dịch liên quan")].value == "TXN00016"
     assert order_sheet.freeze_panes == "A2"
+    overpaid_order = order_rows["ORD00013"]
+    assert "Đã thu đủ" in overpaid_order[order_headers.index("Trạng thái thanh toán")].value
 
     assert all(
         cell.data_type != "f" for worksheet in workbook.worksheets for row in worksheet.iter_rows() for cell in row

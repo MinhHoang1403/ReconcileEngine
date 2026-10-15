@@ -298,32 +298,35 @@ def _add_semantic_issues(orders: list[Order], banks: list[BankTransaction], issu
     fingerprint_owner: dict[tuple[str | None, int, date, Direction], BankTransaction] = {}
     for bank in banks:
         bank_ids.setdefault(bank.bank_txn_id, []).append(bank.lineage.source_row_number if bank.lineage else 0)
-        fingerprint = (bank.txn_ref, bank.posted_amount_minor, bank.txn_date, bank.direction)
-        owner = fingerprint_owner.get(fingerprint)
-        if owner and owner.bank_txn_id != bank.bank_txn_id:
-            duplicate_bank_ids.add(bank.bank_txn_id)
-            issues.append(
-                DataIssue(
-                    "POSSIBLE_REIMPORT",
-                    Severity.WARNING,
-                    "bank_transactions",
-                    (
-                        f"Giao dịch {bank.bank_txn_id} có fingerprint giống "
-                        f"{owner.bank_txn_id}; cần xác minh trước khi dùng cash."
-                    ),
-                    tuple(
-                        row
-                        for row in (
-                            owner.lineage.source_row_number if owner.lineage else 0,
-                            bank.lineage.source_row_number if bank.lineage else 0,
-                        )
-                        if row
-                    ),
-                    (owner.bank_txn_id, bank.bank_txn_id),
+        # Amount/date coincidence without a stable source reference is not
+        # sufficient evidence of re-import; two legitimate credits can share it.
+        if bank.txn_ref:
+            fingerprint = (bank.txn_ref, bank.posted_amount_minor, bank.txn_date, bank.direction)
+            owner = fingerprint_owner.get(fingerprint)
+            if owner and owner.bank_txn_id != bank.bank_txn_id:
+                duplicate_bank_ids.add(bank.bank_txn_id)
+                issues.append(
+                    DataIssue(
+                        "POSSIBLE_REIMPORT",
+                        Severity.WARNING,
+                        "bank_transactions",
+                        (
+                            f"Giao dịch {bank.bank_txn_id} có fingerprint giống "
+                            f"{owner.bank_txn_id}; cần xác minh trước khi dùng cash."
+                        ),
+                        tuple(
+                            row
+                            for row in (
+                                owner.lineage.source_row_number if owner.lineage else 0,
+                                bank.lineage.source_row_number if bank.lineage else 0,
+                            )
+                            if row
+                        ),
+                        (owner.bank_txn_id, bank.bank_txn_id),
+                    )
                 )
-            )
-        else:
-            fingerprint_owner[fingerprint] = bank
+            else:
+                fingerprint_owner[fingerprint] = bank
         if bank.amount_basis is AmountBasis.GROSS_SETTLEMENT:
             issues.append(
                 DataIssue(

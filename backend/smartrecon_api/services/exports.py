@@ -26,6 +26,7 @@ SHEET_NAMES = [
 PAYMENT_STATUS = {
     "FULL": "Đã thu đủ",
     "PARTIAL": "Thu một phần",
+    "OVERPAID": "Đã thu đủ, còn tiền nhận chưa phân bổ",
     "NO_CONFIRMED_RECEIPT": "Chưa có tiền xác nhận",
     "UNKNOWN": "Chưa xác định",
     "NOT_ELIGIBLE": "Không đủ điều kiện",
@@ -346,7 +347,7 @@ def _write_overview(
         (
             "Đơn hàng đã xác nhận thanh toán đủ",
             kpis.get("fully_settled_orders_count", 0),
-            "Số đơn có số còn phải thu bằng 0.",
+            "Số đơn có bằng chứng đối chiếu xác nhận và nghĩa vụ đã được giải quyết đầy đủ.",
         ),
         (
             "Trường hợp cần kiểm tra",

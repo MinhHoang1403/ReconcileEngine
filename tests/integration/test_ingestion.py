@@ -3,6 +3,7 @@ from pathlib import Path
 
 import pandas as pd
 import pytest
+from openpyxl import Workbook
 
 from smartrecon.domain.statuses import Currency, Severity
 from smartrecon.ingest.eda import summarize_raw, summarize_standardized
@@ -18,6 +19,24 @@ def _read_demo_csv():
     return read_source_bundle(
         orders_path=DEMO_DIR / "internal_receivables.csv",
         bank_path=DEMO_DIR / "bank_transactions.csv",
+    )
+
+
+def _minimal_mapping() -> MappingConfig:
+    return MappingConfig(
+        order_columns={
+            "order_id": "order_id",
+            "ordered_at": "ordered_at",
+            "expected_amount": "expected_amount",
+        },
+        bank_columns={
+            "bank_txn_id": "bank_txn_id",
+            "txn_date": "txn_date",
+            "posted_amount": "posted_amount",
+            "direction": "direction",
+            "amount_basis": "amount_basis",
+        },
+        currency=Currency.VND,
     )
 
 
@@ -228,6 +247,93 @@ def test_invalid_file_content_and_ambiguous_workbook_are_rejected(tmp_path: Path
             orders_sheet="Internal",
             bank_sheet="Internal",
         )
+
+
+def test_duplicate_headers_are_rejected_before_pandas_can_rename_them(tmp_path: Path) -> None:
+    duplicate_csv = tmp_path / "duplicate.csv"
+    duplicate_csv.write_text("id,id\n1,2\n", encoding="utf-8")
+    with pytest.raises(InputFileError, match="Header"):
+        read_table(duplicate_csv)
+
+    duplicate_xlsx = tmp_path / "duplicate.xlsx"
+    workbook = Workbook()
+    worksheet = workbook.active
+    worksheet.append(["id", "id"])
+    worksheet.append(["1", "2"])
+    workbook.save(duplicate_xlsx)
+    workbook.close()
+    with pytest.raises(InputFileError, match="Header"):
+        read_table(duplicate_xlsx)
+
+
+def test_same_amount_and_date_without_reference_are_distinct_cash_rows(tmp_path: Path) -> None:
+    orders_path = tmp_path / "orders.csv"
+    bank_path = tmp_path / "bank.csv"
+    pd.DataFrame([{"order_id": "O1", "ordered_at": "2026-01-01", "expected_amount": "200000"}]).to_csv(
+        orders_path, index=False
+    )
+    pd.DataFrame(
+        [
+            {
+                "bank_txn_id": "B1",
+                "txn_date": "2026-01-02",
+                "posted_amount": "100000",
+                "direction": "CREDIT",
+                "amount_basis": "POSTED_CASH",
+            },
+            {
+                "bank_txn_id": "B2",
+                "txn_date": "2026-01-02",
+                "posted_amount": "100000",
+                "direction": "CREDIT",
+                "amount_basis": "POSTED_CASH",
+            },
+        ]
+    ).to_csv(bank_path, index=False)
+
+    normalized = normalize_bundle(
+        read_source_bundle(orders_path=orders_path, bank_path=bank_path),
+        _minimal_mapping(),
+    )
+
+    assert normalized.duplicate_bank_ids == ()
+    assert not [issue for issue in normalized.issues if issue.code == "POSSIBLE_REIMPORT"]
+
+
+def test_excluding_one_colliding_row_resolves_collision_when_one_row_remains(tmp_path: Path) -> None:
+    orders_path = tmp_path / "orders.csv"
+    bank_path = tmp_path / "bank.csv"
+    pd.DataFrame(
+        [
+            {"order_id": "O1", "ordered_at": "2026-01-01", "expected_amount": "100000"},
+            {"order_id": "O1", "ordered_at": "2026-01-02", "expected_amount": "100000"},
+        ]
+    ).to_csv(orders_path, index=False)
+    pd.DataFrame(
+        [
+            {
+                "bank_txn_id": "B1",
+                "txn_date": "2026-01-02",
+                "posted_amount": "100000",
+                "direction": "CREDIT",
+                "amount_basis": "POSTED_CASH",
+            }
+        ]
+    ).to_csv(bank_path, index=False)
+    normalized = normalize_bundle(
+        read_source_bundle(orders_path=orders_path, bank_path=bank_path),
+        _minimal_mapping(),
+    )
+    assert build_health_report(normalized).status == "BLOCKED"
+
+    filtered, report = apply_exclusions(
+        normalized,
+        [Exclusion("orders", 3, "Dòng trùng đã được xác minh")],
+    )
+
+    assert [order.order_id for order in filtered.orders] == ["O1"]
+    assert report.status == "READY"
+    assert not [issue for issue in report.issues if issue.code == "ORDER_ID_COLLISION"]
 
 
 def test_lineage_hashes_are_present_and_json_ready() -> None:

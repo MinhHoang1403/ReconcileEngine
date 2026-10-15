@@ -174,7 +174,7 @@ def _guidance(
             return "Chưa tìm thấy giao dịch thanh toán tương ứng. Kiểm tra kỳ sao kê và mã tham chiếu."
         if "PARTIAL_PAYMENT" in codes:
             return "Đã xác định giao dịch nhưng số tiền chưa đủ. Kiểm tra khoản còn thiếu và không tự coi là phí."
-        if "OVERPAYMENT" in codes:
+        if "OVERPAY_RESIDUAL" in codes:
             return "Đơn hàng đã đủ tiền nhưng còn tiền nhận chưa phân bổ. Xác minh cách xử lý số dư."
     if link_status == "PROPOSED":
         return "Đây là đề xuất ghép, chưa tạo khoản phân bổ tiền và chưa đi vào KPI đã xác nhận."

@@ -2,6 +2,8 @@
 
 import re
 import unicodedata
+from collections.abc import Sequence
+from re import Pattern
 
 from smartrecon.domain.models import Order
 
@@ -25,14 +27,27 @@ def order_reference_index(orders: list[Order]) -> dict[str, tuple[str, ...]]:
     return {reference: tuple(sorted(order_ids)) for reference, order_ids in owners.items()}
 
 
-def extract_known_references(text: str, known_references: set[str]) -> tuple[str, ...]:
+def compile_known_reference_patterns(known_references: set[str]) -> tuple[tuple[str, Pattern[str]], ...]:
+    """Compile boundary-safe patterns once for reuse across all bank rows in a run."""
+    patterns: list[tuple[str, Pattern[str]]] = []
+    for reference in sorted(known_references, key=lambda item: (-len(item), item)):
+        flexible = r"[\s_-]*".join(re.escape(character) for character in reference)
+        patterns.append((reference, re.compile(rf"(?<![A-Z0-9]){flexible}(?![A-Z0-9])")))
+    return tuple(patterns)
+
+
+def extract_known_references(
+    text: str,
+    known_references: set[str],
+    *,
+    compiled_patterns: Sequence[tuple[str, Pattern[str]]] | None = None,
+) -> tuple[str, ...]:
     """Return full known references with strict alphanumeric token boundaries."""
     normalized = unicodedata.normalize("NFKC", text).upper()
     hits: list[str] = []
-    for reference in sorted(known_references, key=lambda item: (-len(item), item)):
-        flexible = r"[\s_-]*".join(re.escape(character) for character in reference)
-        pattern = rf"(?<![A-Z0-9]){flexible}(?![A-Z0-9])"
-        if re.search(pattern, normalized):
+    patterns = compiled_patterns or compile_known_reference_patterns(known_references)
+    for reference, pattern in patterns:
+        if pattern.search(normalized):
             hits.append(reference)
     return tuple(hits)
 

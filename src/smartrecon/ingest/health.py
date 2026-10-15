@@ -32,8 +32,17 @@ def build_health_report(normalized: NormalizedBundle, excluded_rows: tuple[Exclu
     excluded_keys = {(item.feed, item.source_row_number) for item in excluded_rows}
     effective_issues: list[DataIssue] = []
     for issue in normalized.issues:
-        if issue.source_rows and all((issue.feed, row_number) in excluded_keys for row_number in issue.source_rows):
-            continue
+        if issue.source_rows:
+            remaining_rows = [
+                row_number for row_number in issue.source_rows if (issue.feed, row_number) not in excluded_keys
+            ]
+            if not remaining_rows:
+                continue
+            if (
+                issue.code in {"ORDER_ID_COLLISION", "BANK_ID_COLLISION", "POSSIBLE_REIMPORT"}
+                and len(remaining_rows) <= 1
+            ):
+                continue
         effective_issues.append(issue)
 
     blocking = sum(issue.severity is Severity.BLOCKING for issue in effective_issues)

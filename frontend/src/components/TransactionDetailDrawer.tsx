@@ -1,5 +1,6 @@
 import { DetailDrawer } from "./DetailDrawer";
 import type { DetailBankTransaction, DetailOrder, TransactionDetail } from "../types";
+import { formatMoney } from "../utils/money";
 
 const relationshipLabels: Record<string, string> = {
   ONE_TO_ONE: "Một đơn hàng – một giao dịch",
@@ -28,19 +29,10 @@ const reasonLabels: Record<string, string> = {
   ORPHAN_INTERNAL: "Chưa tìm thấy giao dịch thanh toán tương ứng",
   NO_CONFIRMED_RECEIPT: "Chưa có khoản thu được xác nhận",
   PARTIAL_PAYMENT: "Thanh toán chưa đủ",
-  OVERPAYMENT: "Có tiền nhận chưa phân bổ",
+  OVERPAY_RESIDUAL: "Có tiền nhận chưa phân bổ",
   AMBIGUOUS_MATCH: "Có nhiều phương án đối chiếu",
   FUZZY_REFERENCE: "Tham chiếu gần giống, cần kiểm tra",
 };
-
-function formatMoney(value: unknown, currency: string): string {
-  const numeric = typeof value === "number" ? value : Number(value ?? 0);
-  return new Intl.NumberFormat("vi-VN", {
-    style: "currency",
-    currency,
-    maximumFractionDigits: currency === "BRL" ? 2 : 0,
-  }).format(numeric / (currency === "BRL" ? 100 : 1));
-}
 
 function displayValue(value: unknown): string {
   if (value === null || value === undefined || value === "") return "—";

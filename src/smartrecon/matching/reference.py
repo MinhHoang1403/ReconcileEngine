@@ -6,7 +6,11 @@ from smartrecon.config import ReconciliationPolicy
 from smartrecon.domain.models import BankTransaction, MatchEvidence, Order
 from smartrecon.domain.statuses import AmountBasis, Direction, GroupType
 from smartrecon.matching.models import ProposedGroup
-from smartrecon.matching.references import extract_known_references, order_reference_index
+from smartrecon.matching.references import (
+    compile_known_reference_patterns,
+    extract_known_references,
+    order_reference_index,
+)
 
 
 def discover_strong_reference_groups(
@@ -18,6 +22,7 @@ def discover_strong_reference_groups(
     """Build connected reference components and classify safe shapes deterministically."""
     reference_index = order_reference_index(orders)
     known = set(reference_index)
+    reference_patterns = compile_known_reference_patterns(known)
     order_by_id = {order.order_id: order for order in orders}
     bank_by_id = {bank.bank_txn_id: bank for bank in banks}
     order_to_banks: dict[str, set[str]] = defaultdict(set)
@@ -33,7 +38,7 @@ def discover_strong_reference_groups(
         ):
             continue
         text = " ".join(value for value in (bank.txn_ref, bank.description, bank.batch_ref) if value)
-        hits = extract_known_references(text, known)
+        hits = extract_known_references(text, known, compiled_patterns=reference_patterns)
         for hit in hits:
             owners = reference_index[hit]
             if len(owners) != 1:

@@ -281,6 +281,10 @@ def normalize_session(session: UploadSession) -> tuple[NormalizedBundle, Any]:
 def apply_resolution(db: Session, session: UploadSession, request: ResolutionRequest) -> dict[str, Any]:
     raw = load_raw_bundle(session)
     normalized = normalize_bundle(raw, mapping_from_request(session.mapping_snapshot or {}))
+    row_limits = {"orders": len(raw.orders.frame) + 1, "bank_transactions": len(raw.bank_transactions.frame) + 1}
+    for exclusion in request.exclusions:
+        if exclusion.source_row_number > row_limits[exclusion.feed]:
+            raise ValueError(f"Dòng {exclusion.source_row_number} không tồn tại trong nguồn {exclusion.feed}")
     exclusions = [Exclusion(**item.model_dump()) for item in request.exclusions]
     resolved, report = apply_exclusions(normalized, exclusions)
     mapping = mapping_from_request(session.mapping_snapshot or {})

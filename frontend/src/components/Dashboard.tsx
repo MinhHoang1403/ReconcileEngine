@@ -12,6 +12,8 @@ import type {
   OrderRow,
   TransactionDetail,
 } from "../types";
+import { asSafeMinorUnit, formatMoney } from "../utils/money";
+import { buildLayerChartModel, buildPaymentStatusChartModel } from "./dashboardCharts";
 import { TransactionDetailDrawer } from "./TransactionDetailDrawer";
 
 const Plot = createPlotlyComponent(Plotly);
@@ -44,27 +46,10 @@ const reasonCode: Record<string, string> = {
   ORPHAN_INTERNAL: "Chưa tìm thấy giao dịch thanh toán tương ứng",
   NO_CONFIRMED_RECEIPT: "Chưa có khoản thu được xác nhận",
   PARTIAL_PAYMENT: "Thanh toán chưa đủ",
-  OVERPAYMENT: "Có tiền nhận chưa phân bổ",
+  OVERPAY_RESIDUAL: "Có tiền nhận chưa phân bổ",
   AMBIGUOUS_MATCH: "Có nhiều phương án đối chiếu",
   FUZZY_REFERENCE: "Tham chiếu gần giống, cần kiểm tra",
 };
-const layerLabels: Record<string, string> = {
-  L1: "Mã giao dịch/đơn hàng rõ ràng",
-  L2: "Mã kết hợp điều kiện ngày, tiền hoặc chính sách",
-  L3: "Đề xuất từ thông tin gần giống",
-  L4: "Đề xuất thanh toán gộp hoặc chia nhiều lần",
-};
-
-function formatMoney(value: unknown, currency: string): string {
-  const numeric = typeof value === "number" ? value : Number(value ?? 0);
-  const divisor = currency === "BRL" ? 100 : 1;
-  return new Intl.NumberFormat("vi-VN", {
-    style: "currency",
-    currency,
-    maximumFractionDigits: currency === "BRL" ? 2 : 0,
-  }).format(numeric / divisor);
-}
-
 function includesQuery(values: unknown[], query: string) {
   if (!query) return true;
   return values.some((value) => String(value ?? "").toLocaleLowerCase("vi").includes(query));
@@ -118,13 +103,17 @@ export function Dashboard({
   const [detailError, setDetailError] = useState<string | null>(null);
   const currency = String(data.kpis.currency ?? "VND");
   const normalizedQuery = query.trim().toLocaleLowerCase("vi");
-  const layers = Object.keys(data.layer_counts);
-  const paymentLabels = Object.keys(data.payment_status_counts).filter((key) => data.payment_status_counts[key] > 0);
-  const expected = Number(data.kpis.expected_receivable_minor ?? 0);
-  const confirmed = Number(data.kpis.confirmed_cash_allocated_minor ?? 0);
-  const adjustments = Number(data.kpis.verified_adjustments_minor ?? 0);
-  const outstanding = Number(data.kpis.outstanding_receivable_minor ?? 0);
-  const bridgeValid = expected === confirmed + adjustments + outstanding;
+  const layerChart = buildLayerChartModel(data.layer_counts);
+  const paymentChart = buildPaymentStatusChartModel(data);
+  const bridgeInputs = [
+    data.kpis.expected_receivable_minor,
+    data.kpis.confirmed_cash_allocated_minor,
+    data.kpis.verified_adjustments_minor,
+    data.kpis.outstanding_receivable_minor,
+  ];
+  const [expected, confirmed, adjustments, outstanding] = bridgeInputs.map(asSafeMinorUnit);
+  const bridgeCanVerify = expected !== null && confirmed !== null && adjustments !== null && outstanding !== null;
+  const bridgeValid = bridgeCanVerify && expected === confirmed + adjustments + outstanding;
   const moneyCards = [
     ["Tổng số tiền cần thu", "expected_receivable_minor", "Tổng giá trị các đơn hàng đủ điều kiện đối soát."],
     ["Tiền đã nhận và đối chiếu thành công", "confirmed_cash_allocated_minor", "Chỉ gồm tiền mặt đã được phân bổ bằng quan hệ xác nhận."],
@@ -197,37 +186,65 @@ export function Dashboard({
           {moneyCards.map(([label, key, explanation]) => (
             <article className="kpi-card" key={key} title={explanation}><span>{label}</span><strong>{formatMoney(data.kpis[key], currency)}</strong><small>{explanation}</small></article>
           ))}
-          <article className="kpi-card"><span>Đơn hàng đã xác nhận thanh toán đủ</span><strong>{String(data.kpis.fully_settled_orders_count)}</strong><small>Đơn có số còn phải thu bằng 0.</small></article>
+          <article className="kpi-card"><span>Đơn hàng đã xác nhận thanh toán đủ</span><strong>{String(data.kpis.fully_settled_orders_count)}</strong><small>Đơn có bằng chứng đối chiếu xác nhận và nghĩa vụ đã được giải quyết đầy đủ.</small></article>
           <article className="kpi-card attention"><span>Trường hợp cần kiểm tra</span><strong>{String(data.kpis.unresolved_exceptions_count)}</strong><small>Các trường hợp chưa đủ bằng chứng hoặc còn chênh lệch.</small></article>
         </div>
         <div className={`kpi-bridge ${bridgeValid ? "valid" : "invalid"}`}>
           <strong>Đối chiếu tổng phải thu</strong>
           <span>{formatMoney(expected, currency)} = {formatMoney(confirmed, currency)} tiền đã nhận + {formatMoney(adjustments, currency)} điều chỉnh đã xác minh + {formatMoney(outstanding, currency)} còn phải thu</span>
-          <small>{bridgeValid ? "Các thành phần khớp chính xác." : "Các thành phần chưa khớp; cần kiểm tra dữ liệu nguồn."}</small>
+          <small>{bridgeValid
+            ? "Các thành phần khớp chính xác."
+            : bridgeCanVerify
+              ? "Các thành phần chưa khớp; cần kiểm tra dữ liệu nguồn."
+              : "Không thể xác minh trên trình duyệt vì có giá trị thiếu hoặc vượt giới hạn số nguyên an toàn."}</small>
         </div>
       </section>
 
       <section className="dashboard-section" aria-labelledby="analysis-title">
         <div className="section-label"><span>B</span><div><h2 id="analysis-title">Phân tích kết quả</h2><p>So sánh số nhóm được tìm thấy qua từng phương pháp và trạng thái thu tiền.</p></div></div>
         <div className="chart-grid">
-          <article className="surface chart-card">
-            <div className="chart-heading"><div><h3>Giao dịch được tìm thấy qua từng phương pháp</h3><p>Nhóm đã xác nhận tạo phân bổ tiền; nhóm đề xuất chỉ là gợi ý để kiểm tra và không đi vào KPI tiền.</p></div></div>
-            <Plot
+          <article className="surface chart-card" data-chart="matching-layers">
+            <div className="chart-heading"><div><h3>Nhóm đối chiếu theo phương pháp</h3><p>Đơn vị là nhóm đối chiếu, không phải từng giao dịch ngân hàng. Đề xuất chưa xác nhận không tạo phân bổ và không đi vào KPI tiền.</p></div></div>
+            <div className="chart-series-legend" aria-label="Chú giải biểu đồ phương pháp"><span><i className="legend-confirmed" />Đã xác nhận</span><span><i className="legend-proposed" />Đề xuất cần kiểm tra</span></div>
+            {layerChart.isEmpty ? <p className="chart-empty">Chưa có nhóm đối chiếu hoặc đề xuất để hiển thị.</p> : <Plot
               data={[
-                { type: "bar", name: "Đã xác nhận", x: layers.map((layer) => layerLabels[layer] ?? layer), y: layers.map((layer) => data.layer_counts[layer].confirmed_groups), marker: { color: "#176b4d" } },
-                { type: "bar", name: "Đang được đề xuất kiểm tra", x: layers.map((layer) => layerLabels[layer] ?? layer), y: layers.map((layer) => data.layer_counts[layer].proposed_groups), marker: { color: "#d49320" } },
+                {
+                  type: "bar", orientation: "h", name: "Đã xác nhận",
+                  x: layerChart.rows.map((row) => row.confirmed), y: layerChart.rows.map((row) => row.tickLabel),
+                  customdata: layerChart.rows.map((row) => row.label),
+                  text: layerChart.rows.map((row) => row.confirmed > 0 ? String(row.confirmed) : ""), textposition: "outside", cliponaxis: false,
+                  hovertemplate: "%{customdata}<br>Đã xác nhận: %{x:,d} nhóm<extra></extra>", marker: { color: "#176b4d" },
+                },
+                {
+                  type: "bar", orientation: "h", name: "Đề xuất cần kiểm tra",
+                  x: layerChart.rows.map((row) => row.proposed), y: layerChart.rows.map((row) => row.tickLabel),
+                  customdata: layerChart.rows.map((row) => row.label),
+                  text: layerChart.rows.map((row) => row.proposed > 0 ? String(row.proposed) : ""), textposition: "outside", cliponaxis: false,
+                  hovertemplate: "%{customdata}<br>Đề xuất cần kiểm tra: %{x:,d} nhóm<extra></extra>", marker: { color: "#d49320" },
+                },
               ]}
-              layout={{ barmode: "stack", margin: { l: 52, r: 14, t: 18, b: 82 }, yaxis: { title: { text: "Số nhóm giao dịch" }, rangemode: "tozero", dtick: 1 }, paper_bgcolor: "transparent", plot_bgcolor: "transparent", autosize: true, legend: { orientation: "h" }, font: { family: "Segoe UI, Arial, sans-serif", color: "#44534c" } }}
-              config={{ displayModeBar: false, responsive: true }} useResizeHandler style={{ width: "100%", height: 330 }}
-            />
+              layout={{ barmode: "group", margin: { l: 190, r: 34, t: 10, b: 48 }, xaxis: { title: { text: "Số nhóm đối chiếu" }, rangemode: "tozero", tickmode: "auto", nticks: 6, tickformat: ",d", automargin: true }, yaxis: { automargin: true, autorange: "reversed" }, paper_bgcolor: "transparent", plot_bgcolor: "transparent", autosize: true, showlegend: false, bargap: 0.24, font: { family: "Segoe UI, Arial, sans-serif", color: "#44534c", size: 11 } }}
+              config={{ displayModeBar: false, responsive: true }} useResizeHandler style={{ width: "100%", height: 360 }}
+            />}
           </article>
-          <article className="surface chart-card">
-            <div className="chart-heading"><div><h3>Trạng thái đơn hàng cần thu</h3><p>Phân bố trạng thái trên toàn phiên đối soát.</p></div></div>
-            <Plot
-              data={[{ type: "pie", hole: 0.62, labels: paymentLabels.map((label) => paymentStatus[label] ?? label), values: paymentLabels.map((label) => data.payment_status_counts[label]), marker: { colors: ["#176b4d", "#d49320", "#b9493f", "#7b8b83"] } }]}
-              layout={{ margin: { l: 10, r: 10, t: 18, b: 20 }, paper_bgcolor: "transparent", autosize: true, showlegend: true, font: { family: "Segoe UI, Arial, sans-serif", color: "#44534c" } }}
-              config={{ displayModeBar: false, responsive: true }} useResizeHandler style={{ width: "100%", height: 330 }}
-            />
+          <article className="surface chart-card" data-chart="payment-statuses">
+            <div className="chart-heading"><div><h3>Tình trạng thanh toán của các đơn hàng</h3><p>Mẫu số: {paymentChart.eligibleTotal.toLocaleString("vi-VN")} đơn hàng đủ điều kiện đối soát.</p></div></div>
+            {paymentChart.isEmpty ? <p className="chart-empty">Chưa có đơn hàng đủ điều kiện để thống kê tình trạng thanh toán.</p> : <>
+              <Plot
+                data={[{
+                  type: "pie", hole: 0.62,
+                  labels: paymentChart.rows.map((row) => row.label), values: paymentChart.rows.map((row) => row.count),
+                  customdata: paymentChart.rows.map((row) => row.legendLabel),
+                  marker: { colors: paymentChart.rows.map((row) => row.color) },
+                  textinfo: "none", sort: false, hovertemplate: "%{customdata}<extra></extra>",
+                }]}
+                layout={{ margin: { l: 8, r: 8, t: 8, b: 8 }, paper_bgcolor: "transparent", autosize: true, showlegend: false, font: { family: "Segoe UI, Arial, sans-serif", color: "#44534c" } }}
+                config={{ displayModeBar: false, responsive: true }} useResizeHandler style={{ width: "100%", height: 250 }}
+              />
+              <div className="payment-legend" aria-label="Chú giải tình trạng thanh toán">{paymentChart.rows.map((row) => <div key={row.code}><i style={{ backgroundColor: row.color }} /><span>{row.label}</span><strong>{row.count.toLocaleString("vi-VN")} đơn ({row.percentage.toLocaleString("vi-VN", { maximumFractionDigits: 1 })}%)</strong></div>)}</div>
+            </>}
+            {paymentChart.notEligibleCount > 0 && <p className="chart-note">Không đủ điều kiện: {paymentChart.notEligibleCount.toLocaleString("vi-VN")} đơn, không thuộc mẫu số biểu đồ.</p>}
+            {!paymentChart.isConsistent && <p className="chart-warning" role="status">Tổng trạng thái ({paymentChart.countedTotal.toLocaleString("vi-VN")}) chưa khớp số đơn đủ điều kiện ({paymentChart.eligibleTotal.toLocaleString("vi-VN")}).</p>}
           </article>
         </div>
       </section>

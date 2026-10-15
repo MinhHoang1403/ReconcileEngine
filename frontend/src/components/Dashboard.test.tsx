@@ -11,7 +11,7 @@ const data = {
   effective_revision: 1,
   kpis: {
     currency: "VND", expected_receivable_minor: 1000, confirmed_cash_allocated_minor: 800,
-    outstanding_receivable_minor: 200, unapplied_bank_credit_minor: 50,
+    verified_adjustments_minor: 0, outstanding_receivable_minor: 200, unapplied_bank_credit_minor: 50,
     fully_settled_orders_count: 1, unresolved_exceptions_count: 1,
   },
   layer_counts: { EXACT: { confirmed_groups: 1, proposed_groups: 1 } },

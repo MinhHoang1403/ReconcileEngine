@@ -67,7 +67,10 @@ def calculate_kpis(
         "eligible_orders_count": len(eligible_orders),
         "bank_eligible_credit_count": len(eligible_banks),
         "confirmed_link_orders_count": sum(cash_by_order[order.order_id] > 0 for order in eligible_orders),
-        "fully_settled_orders_count": sum(value == 0 for value in outstanding.values()),
+        "fully_settled_orders_count": sum(
+            payment_statuses[order.order_id] in {PaymentStatus.FULL, PaymentStatus.OVERPAID}
+            for order in eligible_orders
+        ),
         "partially_settled_orders_count": sum(
             cash_by_order[order.order_id] + adjustment_by_order[order.order_id] > 0 and outstanding[order.order_id] > 0
             for order in eligible_orders

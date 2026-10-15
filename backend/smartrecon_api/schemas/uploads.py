@@ -1,6 +1,6 @@
 """Upload, mapping, and health HTTP schemas."""
 
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -20,7 +20,7 @@ class MappingRequest(BaseModel):
 
 
 class ExclusionRequest(BaseModel):
-    feed: str
+    feed: Literal["orders", "bank_transactions"]
     source_row_number: int = Field(ge=2)
     reason: str = Field(min_length=3, max_length=500)
 

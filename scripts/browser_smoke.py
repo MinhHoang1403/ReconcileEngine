@@ -236,6 +236,82 @@ def main() -> None:
         assert run_id_match
         run_id = run_id_match.group(1)
 
+        chart_evidence = devtools.evaluate(
+            "(() => { const layerCard = document.querySelector('[data-chart=matching-layers]'); "
+            "const paymentCard = document.querySelector('[data-chart=payment-statuses]'); "
+            "const layerPlot = layerCard.querySelector('.js-plotly-plot'); "
+            "const paymentPlot = paymentCard.querySelector('.js-plotly-plot'); "
+            "const inside = (child, parent) => { const a = child.getBoundingClientRect(); "
+            "const b = parent.getBoundingClientRect(); return a.left >= b.left - 1 && a.right <= b.right + 1; }; "
+            "return { layerOrientations: layerPlot.data.map(x => x.orientation), "
+            "layerTickmode: layerPlot.layout.xaxis.tickmode, layerNticks: layerPlot.layout.xaxis.nticks, "
+            "layerConfiguredDtick: layerPlot.layout.xaxis.dtick ?? null, "
+            "layerLabels: layerPlot.data[0].customdata, "
+            "layerHoverTemplates: layerPlot.data.map(x => x.hovertemplate), "
+            "layerTicksInside: [...layerCard.querySelectorAll('.ytick text')].every(x => inside(x, layerCard)), "
+            "layerLegendInside: inside(layerCard.querySelector('.chart-series-legend'), layerCard), "
+            "paymentValues: paymentPlot.data[0].values, paymentColors: paymentPlot.data[0].marker.colors, "
+            "paymentHoverTemplate: paymentPlot.data[0].hovertemplate, "
+            "paymentLegendInside: inside(paymentCard.querySelector('.payment-legend'), paymentCard), "
+            "paymentLegendText: paymentCard.querySelector('.payment-legend').innerText }; })()"
+        )
+        assert chart_evidence["layerOrientations"] == ["h", "h"]
+        assert chart_evidence["layerTickmode"] == "auto"
+        assert chart_evidence["layerNticks"] == 6
+        assert chart_evidence["layerConfiguredDtick"] is None
+        assert len(chart_evidence["layerLabels"]) == 4
+        assert all("nhóm" in template for template in chart_evidence["layerHoverTemplates"])
+        assert chart_evidence["layerTicksInside"] is True
+        assert chart_evidence["layerLegendInside"] is True
+        assert chart_evidence["paymentLegendInside"] is True
+        assert sum(chart_evidence["paymentValues"]) == 100
+        assert len(chart_evidence["paymentColors"]) == len(set(chart_evidence["paymentColors"]))
+        assert "customdata" in chart_evidence["paymentHoverTemplate"]
+        assert "đơn (" in chart_evidence["paymentLegendText"]
+
+        devtools.evaluate("document.querySelector('[data-chart=matching-layers]').scrollIntoView({block:'center'})")
+        time.sleep(0.3)
+        capture(devtools, stage_path("charts"))
+        bar_point = devtools.evaluate(
+            "(() => { const paths = [...document.querySelectorAll("
+            "'[data-chart=matching-layers] .barlayer .point path')]; "
+            "const p = paths.find(x => { const b = x.getBoundingClientRect(); return b.width > 2 && b.height > 2; }); "
+            "if (!p) return null; const r = p.getBoundingClientRect(); "
+            "return {x: r.left + r.width / 2, y: r.top + r.height / 2}; })()"
+        )
+        assert bar_point
+        devtools.command(
+            "Input.dispatchMouseEvent",
+            {"type": "mouseMoved", "x": bar_point["x"], "y": bar_point["y"]},
+        )
+        wait_until(devtools, "Boolean(document.querySelector('[data-chart=matching-layers] .hoverlayer .hovertext'))")
+        layer_tooltip = devtools.evaluate(
+            "document.querySelector('[data-chart=matching-layers] .hoverlayer .hovertext')?.textContent"
+        )
+        assert "nhóm" in layer_tooltip
+
+        devtools.evaluate("document.querySelector('[data-chart=payment-statuses]').scrollIntoView({block:'center'})")
+        time.sleep(0.3)
+        capture(devtools, stage_path("payment-chart"))
+        pie_point = devtools.evaluate(
+            "(() => { const p = document.querySelector('[data-chart=payment-statuses] .pielayer .slice path'); "
+            "if (!p) return null; const r = p.getBoundingClientRect(); "
+            "for (let row = 1; row < 10; row++) for (let col = 1; col < 10; col++) { "
+            "const x = r.left + r.width * col / 10; const y = r.top + r.height * row / 10; "
+            "if (document.elementFromPoint(x, y)?.closest('.slice') === p.closest('.slice')) return {x, y}; } "
+            "return null; })()"
+        )
+        assert pie_point
+        devtools.command(
+            "Input.dispatchMouseEvent",
+            {"type": "mouseMoved", "x": pie_point["x"], "y": pie_point["y"]},
+        )
+        wait_until(devtools, "Boolean(document.querySelector('[data-chart=payment-statuses] .hoverlayer .hovertext'))")
+        payment_tooltip = devtools.evaluate(
+            "document.querySelector('[data-chart=payment-statuses] .hoverlayer .hovertext')?.textContent"
+        )
+        assert "đơn (" in payment_tooltip
+
         click_button(devtools, "ORD00001")
         wait_until(devtools, "document.body.innerText.includes('Chi tiết đối chiếu')")
         capture(devtools, stage_path("transaction-detail"))
@@ -283,6 +359,9 @@ def main() -> None:
                 "export": export_evidence,
                 "reopen_verified": True,
                 "source": source_evidence,
+                "charts_detail": chart_evidence,
+                "layer_tooltip": layer_tooltip,
+                "payment_tooltip": payment_tooltip,
                 "screenshots": screenshots,
             }
         )

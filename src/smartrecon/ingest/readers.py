@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import csv
 import hashlib
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 
 import pandas as pd
+from openpyxl import load_workbook
 
 MAX_FILE_BYTES = 25 * 1024 * 1024
 MAX_ROWS = 100_000
@@ -68,6 +70,16 @@ def _validate_shape(frame: pd.DataFrame, source_name: str) -> None:
         raise InputFileError(f"Header bị trùng: {', '.join(duplicates)}")
 
 
+def _validate_headers(headers: list[object]) -> None:
+    """Reject blank or duplicate source headers before Pandas can rename them."""
+    normalized = [str(value).strip() if value is not None else "" for value in headers]
+    if not normalized or any(not value for value in normalized):
+        raise InputFileError("Header không được để trống")
+    duplicates = sorted({value for value in normalized if normalized.count(value) > 1})
+    if duplicates:
+        raise InputFileError(f"Header bị trùng: {', '.join(duplicates)}")
+
+
 def _read_csv(path: Path) -> pd.DataFrame:
     head = path.read_bytes()[:4096]
     if b"\x00" in head:
@@ -75,6 +87,8 @@ def _read_csv(path: Path) -> pd.DataFrame:
     last_error: UnicodeDecodeError | None = None
     for encoding in ("utf-8-sig", "utf-8"):
         try:
+            with path.open("r", encoding=encoding, newline="") as handle:
+                _validate_headers(next(csv.reader(handle), []))
             return pd.read_csv(path, dtype="string", keep_default_na=False, encoding=encoding)
         except UnicodeDecodeError as exc:
             last_error = exc
@@ -105,6 +119,13 @@ def _read_xlsx(path: Path, sheet_name: str | None) -> tuple[pd.DataFrame, str]:
         raise InputFileError("Workbook nhiều sheet cần chọn sheet rõ ràng")
     if selected not in excel.sheet_names:
         raise InputFileError(f"Không tìm thấy sheet: {selected}")
+    workbook = load_workbook(path, read_only=True, data_only=False, keep_links=False)
+    try:
+        worksheet = workbook[selected]
+        header_row = next(worksheet.iter_rows(min_row=1, max_row=1, values_only=True), ())
+        _validate_headers(list(header_row))
+    finally:
+        workbook.close()
     return (
         pd.read_excel(path, sheet_name=selected, dtype="string", keep_default_na=False),
         selected,
