@@ -15,8 +15,8 @@ Tài liệu này phân biệt nguồn nghiên cứu, đặc tả chính thức, 
 
 ## Tiền, chất lượng dữ liệu và bảo toàn
 
-- [Python `decimal` documentation](https://docs.python.org/3/library/decimal.html) mô tả số học decimal, exact representation và rounding modes. SmartRecon chọn parse `Decimal` rồi lưu integer minor units; đây là quyết định thiết kế nhằm bảo toàn phép cộng/trừ tiền.
-- [ISO 4217 currency list](https://www.six-group.com/en/products-services/financial-information/data-standards.html) là nguồn mã currency/minor unit. Phạm vi hiện tại khóa VND (0) và BRL (2); không có FX.
+- [Python `decimal` documentation](https://docs.python.org/3/library/decimal.html) mô tả số học decimal, exact representation và rounding modes. SmartRecon chọn parse `Decimal` rồi lưu integer minor units; đây là quyết định thiết kế nhằm bảo toàn phép cộng/trừ tiền. So sánh chính xác trên `Decimal` được dùng để từ chối VND có phần thập phân khác 0 trước khi chuyển sang integer; không dùng phép làm tròn cho trường hợp này.
+- [ISO 4217 currency list](https://www.six-group.com/en/products-services/financial-information/data-standards.html) là nguồn mã currency/minor unit. Phạm vi hiện tại khóa VND (0) và BRL (2); không có FX. Việc coi VND phân số khác 0 là lỗi `BLOCKING` là quyết định nghiệp vụ đã được chủ dự án phê duyệt, không phải kết quả benchmark hoặc diễn giải mở rộng từ ISO 4217; chính sách BRL không đổi.
 - Wang, R. Y. & Strong, D. M. (1996), “Beyond Accuracy: What Data Quality Means to Data Consumers”, *Journal of Management Information Systems*, DOI [10.1080/07421222.1996.11518099](https://doi.org/10.1080/07421222.1996.11518099). Health Gate của dự án là contract nghiệp vụ riêng gồm blocking/warning/info, không tuyên bố bao phủ toàn bộ framework của bài báo.
 - Các identity cash/receivable trong `MONEY_INVARIANTS.md` là **quy tắc nghiệp vụ của hệ thống simplified payment reconciliation**, không phải chuẩn kế toán tổng quát. Chúng chỉ đúng sau khi xác định eligibility, direction, amount basis và adjustment policy.
 
@@ -42,4 +42,3 @@ Tài liệu này phân biệt nguồn nghiên cứu, đặc tả chính thức, 
 ## Đánh giá
 
 Precision, recall và F1 dùng định nghĩa chuẩn trên tập predicted/truth edges. Group exact match so cả tập order IDs và bank IDs; amount error đo riêng. Threshold/coverage/throughput chỉ được báo sau khi thực chạy, kèm data hash, seed, policy, rule version và phần cứng. SmartRecon chưa tuyên bố độ chính xác trên sao kê thật.
-

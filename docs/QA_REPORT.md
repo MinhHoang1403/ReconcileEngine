@@ -8,14 +8,22 @@ Ngày kiểm tra: 2026-10-15. Môi trường: Windows/PowerShell, Docker Engine 
 |---|---|---|
 | Python lint | `uv run ruff check .` | Pass |
 | Python format | `uv run ruff format --check .` | Pass |
-| Python tests | `uv run pytest -q` | 61 passed; một deprecation warning từ FastAPI TestClient |
+| Python tests | `uv run pytest -q` | 83 passed; một deprecation warning từ FastAPI TestClient |
 | Golden | `uv run pytest tests/golden -q` | 26 assertions passed, phủ đúng 22 fixtures F01–F18 và F21–F24 |
+| Property | `uv run pytest tests/property -q` | 4 passed; các bất biến bảo toàn tiền đạt |
+| VND/CSV/XLSX/API | `uv run pytest tests/unit/test_money.py tests/integration/test_ingestion.py tests/api/test_workflow.py -q` | 36 passed |
 | Frontend lint | `npm run lint` | Pass |
-| Frontend unit | `npm run test` | 5 passed trong 3 test files |
+| Frontend unit | `npm run test` | 17 passed trong 5 test files |
 | Frontend build | `npm run build` | Pass; Plotly basic bundle có cảnh báo chunk lớn, không phải lỗi build |
 | Compose | `docker compose config --quiet` | Exit 0 |
 | Images | `docker compose up --build -d` | Backend và frontend build sạch, ba services healthy |
 | Migration | `docker compose exec -T backend uv run alembic current` | `20261015_02 (head)` |
+
+## Quy tắc VND có phần thập phân
+
+Quyết định nghiệp vụ ngày 2026-10-15 đã được kiểm tra ở ba lớp. Unit tests xác nhận VND có phần thập phân bằng 0 vẫn hợp lệ với cả cấu hình dấu `.` và `,`, còn phần thập phân khác 0 sinh `MoneyParseError` chứa giá trị đầu vào. Regression riêng xác nhận BRL vẫn dùng `ROUND_HALF_UP` (`1.005 BRL` thành `101` minor units).
+
+Integration tests đọc cả CSV và XLSX. Dòng `100000.5 VND` tạo `ORDER_PARSE_ERROR`/`BANK_PARSE_ERROR` mức `BLOCKING`, giữ số dòng 2 và sample `100000.5`, bị đưa vào `rejected_rows`, không xuất hiện trong canonical input. Trường `declared_fee=0.5` cũng bị chặn ở cả hai định dạng nên lỗi không thể bị bỏ qua qua call site tùy chọn. API tests xác nhận Health Gate trả tên file `orders.csv`/`orders.xlsx`, sheet `Sheet` cho XLSX, dòng 2 và raw `expected_amount=100000.5`. Lệnh kiểm tra trực tiếp trong backend container cũng trả `container_money_policy=PASS`.
 
 ## Workflow và bảo toàn tiền
 
@@ -47,6 +55,8 @@ Kênh Windows `computer-use` đã được thử trước nhưng môi trường 
 - Sau restart: `db`, `backend`, `frontend` đều healthy; log scan tính từ lúc ba service đã healthy không có `ERROR`, `Traceback`, `FATAL` hoặc `panic`.
 
 Kiểm tra lại sau đợt cải tiến giao diện với run `39f53085-d3e2-4256-b6d9-fce48c3a062a`: trước và sau `docker compose restart`, confirmed cash vẫn là `66.431.000`, conservation vẫn `true`, workbook tải lại đủ 9 sheet và toàn bộ giá trị cell giống nhau. Hash nhị phân XLSX có thể khác vì metadata thời gian khi workbook được tạo lại, nên persistence được đối chiếu theo dữ liệu workbook thay vì checksum file nén.
+
+Sau khi chốt quy tắc VND, `docker compose up --build -d` build thành công và ba service healthy. Trước/sau `docker compose restart`, số lượng giữ nguyên: `45 upload_sessions`, `40 runs`, `3.920 match_groups`, `3.640 allocation_edges`, `277 artifact_manifest`. Run đã lưu `76119213-5c6a-431d-b4c8-7a24a745cb9f` vẫn trả `67.865.000` phải thu, `66.431.000` cash phân bổ, `2.000` adjustment, `1.432.000` còn phải thu, conservation `true` và 0 violations.
 
 ## Cải tiến giao diện
 

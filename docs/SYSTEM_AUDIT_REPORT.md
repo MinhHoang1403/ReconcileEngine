@@ -67,8 +67,8 @@ Golden/adversarial hiện bao phủ exact/timing/normalized/fuzzy, ambiguity, N:
 
 - PASS: UTF-8/UTF-8-SIG, CSV/XLSX structure, header raw trùng/trống, leading-zero ID, explicit mapping, lineage/file/row hashes.
 - PASS: tiền được parse bằng `Decimal`, sau đó chỉ dùng integer minor units; negative/non-finite/blank bị từ chối.
+- PASS: quyết định nghiệp vụ VND đã được chốt ngày 2026-10-15: chỉ chấp nhận phần thập phân bằng 0; phần thập phân khác 0 sinh lỗi `BLOCKING`, giữ file/sheet/dòng/giá trị raw và không bị làm tròn hoặc đưa vào matching. BRL giữ nguyên `ROUND_HALF_UP`.
 - PASS: BLOCKING chặn run; WARNING/INFO không tạo allocation; exclusion bắt buộc lý do và không tham gia core.
-- OPEN RISK (cần quyết định nghiệp vụ): VND có 0 minor digits và policy hiện dùng `ROUND_HALF_UP`; giá trị VND phân số sẽ được làm tròn theo policy thay vì tự động thành lỗi Health Gate. Audit không tự đổi policy đã chốt.
 
 ## 6. Matching, conflict và allocation
 
@@ -162,8 +162,7 @@ Sau khi reuse compiled regex, 1.000 × 1.000 hoàn tất **0,872 s** và tạo �
 3. Chưa benchmark end-to-end 100.000 dòng hoặc worst-case weak-candidate cross product.
 4. Frontend Plotly bundle khoảng 1,519 MB raw / 498 KB gzip và còn build warning; không ảnh hưởng tính đúng.
 5. Giá trị vượt JavaScript safe integer được chặn hiển thị thay vì hỗ trợ đầy đủ; API numeric contract cần đổi có chủ đích nếu phạm vi tiền yêu cầu lớn hơn.
-6. Rounding VND phân số cần chủ dự án xác nhận nếu muốn chuyển từ policy làm tròn sang blocking data-quality error.
 
 ## 15. Mức sẵn sàng
 
-**PASS cho demo local Giai đoạn 1 và sẵn sàng dùng làm baseline kỹ thuật trước khi lập kế hoạch Giai đoạn 2**, với điều kiện không diễn giải thành chứng nhận production/public deployment. Các giới hạn auth, dữ liệu thật, tải 100.000 dòng, VND fractional policy và backup/restore phải được quyết định/đo riêng trước production.
+**PASS cho demo local Giai đoạn 1 và sẵn sàng dùng làm baseline kỹ thuật trước khi lập kế hoạch Giai đoạn 2**, với điều kiện không diễn giải thành chứng nhận production/public deployment. Các giới hạn auth, dữ liệu thật, tải 100.000 dòng và backup/restore phải được quyết định/đo riêng trước production.

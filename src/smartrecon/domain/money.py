@@ -39,6 +39,11 @@ def parse_minor_units(
     if not amount.is_finite() or amount < 0:
         raise MoneyParseError("Số tiền phải hữu hạn và không âm")
 
+    if currency is Currency.VND:
+        if amount != amount.to_integral_value():
+            raise MoneyParseError(f"Số tiền VND phải có phần thập phân bằng 0, nhận được: {value!r}")
+        return int(amount)
+
     digits = MINOR_DIGITS[currency]
     factor = Decimal(10) ** digits
     quantized = amount.quantize(Decimal(1).scaleb(-digits), rounding=ROUND_HALF_UP)

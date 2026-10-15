@@ -2,7 +2,9 @@
 
 ## Biểu diễn
 
-BRL dùng 2 chữ số minor unit; VND dùng 0. Parser nhận separator rõ ràng, dùng `Decimal` và `ROUND_HALF_UP`, sau đó core chỉ cộng/trừ integer. `float` không được dùng cho amount; fuzzy score có thể là float vì không phải tiền.
+BRL dùng 2 chữ số minor unit; VND dùng 0. Parser nhận separator rõ ràng và dùng `Decimal`, sau đó core chỉ cộng/trừ integer. Với VND, giá trị sau khi diễn giải separator chỉ hợp lệ khi phần thập phân bằng 0 (`100000`, `100000.0` hợp lệ; `100000.5` không hợp lệ). Giá trị VND có phần thập phân khác 0 phải sinh `MoneyParseError` và lỗi Health Gate mức `BLOCKING`; hệ thống không làm tròn. Chính sách `ROUND_HALF_UP` vẫn áp dụng cho BRL và không bị thay đổi. `float` không được dùng cho amount trong core; fuzzy score có thể là float vì không phải tiền.
+
+Lỗi parse tiền phải giữ dòng nguồn và giá trị đầu vào. Health Gate cung cấp tên file, sheet nếu có, số dòng và các giá trị raw để người dùng sửa dữ liệu; dòng lỗi không được đi vào canonical input hay matching.
 
 `cash_allocation_minor` là tiền thực nhận. `verified_adjustment_minor` là khoản điều chỉnh nghĩa vụ có policy/chứng cứ, không phải cash và không được dùng để làm đẹp chênh lệch.
 
@@ -34,4 +36,3 @@ Proposal không nằm trong `A`. Debit và gross-only report không nằm trong 
 Code kiểm tra ở `smartrecon.domain.invariants.check_conservation`. Tests có oracle số học trực tiếp và property cases để tránh chỉ gọi lại cùng helper rồi coi là chứng minh độc lập.
 
 Nguồn kỹ thuật: Python mô tả `decimal` cho số học thập phân chính xác và nhiều chế độ làm tròn; integer minor-unit là quyết định thiết kế của dự án để làm các identity trên kiểm chứng được. Xem `RESEARCH_REFERENCES.md`.
-

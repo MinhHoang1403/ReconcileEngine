@@ -78,6 +78,12 @@ def _optional(row: pd.Series, columns: dict[str, str], field: str) -> str | None
     return value or None
 
 
+def _money_samples(row: pd.Series, columns: dict[str, str], fields: tuple[str, ...]) -> tuple[str, ...]:
+    """Return non-empty source money values for row-level Health Gate evidence."""
+    values = [normalize_text(row[columns[field]]) for field in fields if columns.get(field)]
+    return tuple(dict.fromkeys(value for value in values if value))
+
+
 def _validate_mapping(
     table: RawTable,
     columns: dict[str, str],
@@ -187,6 +193,7 @@ def normalize_bundle(raw: RawSourceBundle, mapping: MappingConfig) -> Normalized
                     "orders",
                     f"Dòng {row_number} không chuẩn hóa được: {exc}",
                     (row_number,),
+                    _money_samples(row, mapping.order_columns, ("expected_amount",)),
                 )
             )
             rejected.append(RejectedRow("orders", row_number, row_digest, "ORDER_PARSE_ERROR"))
@@ -253,6 +260,7 @@ def normalize_bundle(raw: RawSourceBundle, mapping: MappingConfig) -> Normalized
                     "bank_transactions",
                     f"Dòng {row_number} không chuẩn hóa được: {exc}",
                     (row_number,),
+                    _money_samples(row, mapping.bank_columns, ("posted_amount", "declared_fee")),
                 )
             )
             rejected.append(RejectedRow("bank_transactions", row_number, row_digest, "BANK_PARSE_ERROR"))

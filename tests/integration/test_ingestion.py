@@ -235,6 +235,105 @@ def test_bad_amount_and_currency_mismatch_block_health(tmp_path: Path) -> None:
     assert len(normalized.rejected_rows) == 1
 
 
+def _write_money_sources(tmp_path: Path, suffix: str, amount: str) -> tuple[Path, Path]:
+    orders = pd.DataFrame([{"order_id": "O1", "ordered_at": "2026-01-01", "expected_amount": amount}])
+    bank = pd.DataFrame(
+        [
+            {
+                "bank_txn_id": "B1",
+                "txn_date": "2026-01-01",
+                "posted_amount": amount,
+                "direction": "CREDIT",
+                "amount_basis": "POSTED_CASH",
+            }
+        ]
+    )
+    orders_path = tmp_path / f"orders{suffix}"
+    bank_path = tmp_path / f"bank{suffix}"
+    if suffix == ".csv":
+        orders.to_csv(orders_path, index=False)
+        bank.to_csv(bank_path, index=False)
+    else:
+        orders.to_excel(orders_path, index=False)
+        bank.to_excel(bank_path, index=False)
+    return orders_path, bank_path
+
+
+@pytest.mark.parametrize("suffix", [".csv", ".xlsx"])
+def test_integral_vnd_decimal_is_valid_for_csv_and_xlsx(tmp_path: Path, suffix: str) -> None:
+    orders_path, bank_path = _write_money_sources(tmp_path, suffix, "100000.0")
+
+    normalized = normalize_bundle(
+        read_source_bundle(orders_path=orders_path, bank_path=bank_path),
+        _minimal_mapping(),
+    )
+    report = build_health_report(normalized)
+
+    assert report.status == "READY"
+    assert normalized.orders[0].expected_amount_minor == 100_000
+    assert normalized.bank_transactions[0].posted_amount_minor == 100_000
+    assert normalized.rejected_rows == ()
+
+
+@pytest.mark.parametrize("suffix", [".csv", ".xlsx"])
+def test_fractional_vnd_blocks_csv_and_xlsx_without_silent_drop(tmp_path: Path, suffix: str) -> None:
+    orders_path, bank_path = _write_money_sources(tmp_path, suffix, "100000.5")
+
+    normalized = normalize_bundle(
+        read_source_bundle(orders_path=orders_path, bank_path=bank_path),
+        _minimal_mapping(),
+    )
+    report = build_health_report(normalized)
+    parse_issues = [issue for issue in report.issues if issue.code in {"ORDER_PARSE_ERROR", "BANK_PARSE_ERROR"}]
+
+    assert report.status == "BLOCKED"
+    assert {issue.feed for issue in parse_issues} == {"orders", "bank_transactions"}
+    assert all(issue.severity is Severity.BLOCKING for issue in parse_issues)
+    assert all(issue.source_rows == (2,) for issue in parse_issues)
+    assert all("100000.5" in issue.message_vi for issue in parse_issues)
+    assert all(issue.sample_values == ("100000.5",) for issue in parse_issues)
+    assert normalized.orders == ()
+    assert normalized.bank_transactions == ()
+    assert {(row.feed, row.source_row_number) for row in normalized.rejected_rows} == {
+        ("orders", 2),
+        ("bank_transactions", 2),
+    }
+
+
+@pytest.mark.parametrize("suffix", [".csv", ".xlsx"])
+def test_fractional_vnd_declared_fee_is_not_ignored(tmp_path: Path, suffix: str) -> None:
+    orders_path, bank_path = _write_money_sources(tmp_path, suffix, "100000")
+    if suffix == ".csv":
+        bank = pd.read_csv(bank_path, dtype=str)
+        bank["declared_fee"] = "0.5"
+        bank.to_csv(bank_path, index=False)
+    else:
+        bank = pd.read_excel(bank_path, dtype=str)
+        bank["declared_fee"] = "0.5"
+        bank.to_excel(bank_path, index=False)
+    base_mapping = _minimal_mapping()
+    mapping = MappingConfig(
+        order_columns=base_mapping.order_columns,
+        bank_columns=base_mapping.bank_columns | {"declared_fee": "declared_fee"},
+        currency=Currency.VND,
+    )
+
+    normalized = normalize_bundle(
+        read_source_bundle(orders_path=orders_path, bank_path=bank_path),
+        mapping,
+    )
+    report = build_health_report(normalized)
+    issue = next(item for item in report.issues if item.code == "BANK_PARSE_ERROR")
+
+    assert report.status == "BLOCKED"
+    assert issue.severity is Severity.BLOCKING
+    assert issue.source_rows == (2,)
+    assert issue.sample_values == ("100000", "0.5")
+    assert "0.5" in issue.message_vi
+    assert normalized.bank_transactions == ()
+    assert normalized.rejected_rows[0].reason_code == "BANK_PARSE_ERROR"
+
+
 def test_invalid_file_content_and_ambiguous_workbook_are_rejected(tmp_path: Path) -> None:
     fake_xlsx = tmp_path / "fake.xlsx"
     fake_xlsx.write_text("not a zip", encoding="utf-8")

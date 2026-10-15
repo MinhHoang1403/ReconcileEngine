@@ -4,7 +4,7 @@
 
 Một phiên chỉ nhận hai nguồn: `internal_receivables` và `bank_transactions`. Hai nguồn có thể là hai CSV/XLSX riêng hoặc hai sheet của một workbook. `truth_edges.csv`, `truth_cases.csv` và `manifest.json` chỉ thuộc generator/evaluation, không được gửi qua upload API hoặc import vào matching runtime.
 
-Raw file là bất biến. Mỗi canonical row phải giữ file SHA-256, số dòng nguồn và row hash. ID luôn là chuỗi để bảo toàn số 0 đầu; ngày được parse bằng format/timezone được người dùng xác nhận; tiền được parse bằng `Decimal` rồi chuyển sang integer minor units.
+Raw file là bất biến. Mỗi canonical row phải giữ file SHA-256, số dòng nguồn và row hash. ID luôn là chuỗi để bảo toàn số 0 đầu; ngày được parse bằng format/timezone được người dùng xác nhận; tiền được parse bằng `Decimal` rồi chuyển sang integer minor units. Separator thập phân/hàng nghìn phải theo mapping đã xác nhận. Với VND, phần thập phân sau khi diễn giải separator phải bằng 0; nếu khác 0, dòng bị từ chối bằng lỗi Health Gate `BLOCKING`, không làm tròn và không đi tiếp vào matching. BRL giữ chính sách hai minor digits hiện hành.
 
 ## Khoản phải thu
 
@@ -48,4 +48,3 @@ Vì vậy strong reference có thể tạo `CONFIRMED + PARTIAL`; tìm đúng qu
 ## Tái lập và checksum
 
 Semantic checksum bao gồm canonical input, mapping, policy và rule version theo thứ tự ổn định. `run_id`, timestamp hệ thống và đường dẫn artifact không thuộc semantic checksum. Generator cùng seed/config tạo cùng semantic payload; workbook XLSX chỉ cam kết semantic-equivalent vì metadata ZIP có thể khác theo lần ghi.
-

@@ -1,8 +1,10 @@
 from collections.abc import Generator
+from io import BytesIO
 from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
-from openpyxl import load_workbook
+from openpyxl import Workbook, load_workbook
 
 from backend.smartrecon_api.config import get_settings
 from backend.smartrecon_api.db.database import get_db
@@ -35,6 +37,103 @@ class MemorySession:
 
     def scalar(self, statement: object):
         return None
+
+
+def _xlsx_upload(headers: list[str], values: list[object]) -> bytes:
+    output = BytesIO()
+    workbook = Workbook()
+    worksheet = workbook.active
+    worksheet.append(headers)
+    worksheet.append(values)
+    workbook.save(output)
+    workbook.close()
+    return output.getvalue()
+
+
+@pytest.mark.parametrize("suffix", [".csv", ".xlsx"])
+def test_fractional_vnd_health_detail_preserves_source_context(
+    tmp_path: Path,
+    monkeypatch,
+    suffix: str,
+) -> None:
+    session = MemorySession()
+
+    def test_db() -> Generator[MemorySession, None, None]:
+        yield session
+
+    if suffix == ".csv":
+        orders_content = b"order_id,ordered_at,expected_amount\nO1,2026-01-01,100000.5\n"
+        bank_content = (
+            b"bank_txn_id,txn_date,posted_amount,direction,amount_basis\nB1,2026-01-01,100000,CREDIT,POSTED_CASH\n"
+        )
+        content_type = "text/csv"
+    else:
+        orders_content = _xlsx_upload(
+            ["order_id", "ordered_at", "expected_amount"],
+            ["O1", "2026-01-01", "100000.5"],
+        )
+        bank_content = _xlsx_upload(
+            ["bank_txn_id", "txn_date", "posted_amount", "direction", "amount_basis"],
+            ["B1", "2026-01-01", "100000", "CREDIT", "POSTED_CASH"],
+        )
+        content_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+    monkeypatch.setattr(get_settings(), "artifacts_path", tmp_path / "artifacts")
+    app.dependency_overrides[get_db] = test_db
+    try:
+        with TestClient(app) as client:
+            inspection_response = client.post(
+                "/api/uploads/inspect",
+                files={
+                    "orders_file": (f"receivables{suffix}", orders_content, content_type),
+                    "bank_file": (f"payments{suffix}", bank_content, content_type),
+                },
+            )
+            assert inspection_response.status_code == 200
+            inspection = inspection_response.json()
+            mapping = {
+                "order_columns": {
+                    "order_id": "order_id",
+                    "ordered_at": "ordered_at",
+                    "expected_amount": "expected_amount",
+                },
+                "bank_columns": {
+                    "bank_txn_id": "bank_txn_id",
+                    "txn_date": "txn_date",
+                    "posted_amount": "posted_amount",
+                    "direction": "direction",
+                    "amount_basis": "amount_basis",
+                },
+                "currency": "VND",
+                "source_profile": "BANK_CREDIT",
+                "date_format": "%Y-%m-%d",
+                "decimal_separator": ".",
+                "thousand_separator": ",",
+                "order_defaults": {"order_status": "ELIGIBLE"},
+                "bank_defaults": {},
+            }
+            gate_response = client.post(
+                f"/api/uploads/{inspection['session_id']}/mapping",
+                json=mapping,
+            )
+            assert gate_response.status_code == 200
+            gate = gate_response.json()
+            assert gate["status"] == "HEALTH_BLOCKED"
+            assert gate["report"]["status"] == "BLOCKED"
+            issue_index = next(
+                index for index, issue in enumerate(gate["report"]["issues"]) if issue["code"] == "ORDER_PARSE_ERROR"
+            )
+            detail_response = client.get(f"/api/uploads/{inspection['session_id']}/health/issues/{issue_index}")
+            assert detail_response.status_code == 200
+            detail = detail_response.json()
+            assert detail["severity"] == "BLOCKING"
+            assert detail["sample_values"] == ["100000.5"]
+            assert detail["rows"][0]["source_filename"] == f"orders{suffix}"
+            assert detail["rows"][0]["source_row_number"] == 2
+            assert detail["rows"][0]["raw_values"]["expected_amount"] == "100000.5"
+            assert detail["rows"][0]["sheet_name"] == ("Sheet" if suffix == ".xlsx" else None)
+    finally:
+        app.dependency_overrides.clear()
 
 
 def test_demo_to_export_uses_one_persisted_run(tmp_path: Path, monkeypatch) -> None:
