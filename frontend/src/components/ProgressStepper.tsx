@@ -1,8 +1,8 @@
 export type WorkflowStep = "source" | "mapping" | "health" | "dashboard";
 
 const steps: { id: WorkflowStep; label: string; helper: string }[] = [
-  { id: "source", label: "Nguồn dữ liệu", helper: "Chọn hai feed" },
-  { id: "mapping", label: "Khám phá & ánh xạ", helper: "Kiểm tra cấu trúc" },
+  { id: "source", label: "Nguồn dữ liệu", helper: "Chọn hai nguồn" },
+  { id: "mapping", label: "Kiểm tra & ghép cột", helper: "Xác nhận cấu trúc" },
   { id: "health", label: "Chất lượng & đối soát", helper: "Xác minh dữ liệu" },
   { id: "dashboard", label: "Kết quả & báo cáo", helper: "Tra cứu và xuất" },
 ];

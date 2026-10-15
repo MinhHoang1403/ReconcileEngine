@@ -80,6 +80,8 @@ code { border-radius: 5px; background: #eef2f0; padding: 2px 5px; color: #3d5047
 .surface-heading.compact { margin-bottom: 16px; }
 .required-note, .count-pill, .confidence-pill { flex: none; border-radius: 999px; background: #edf3f0; padding: 5px 9px; color: #53645c; font-size: .72rem; font-weight: 700; }
 .file-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.source-descriptions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-top: 10px; }
+.source-descriptions p { margin: 0; color: var(--muted); font-size: .72rem; line-height: 1.45; }
 .file-field { display: grid; grid-template-columns: 42px minmax(0, 1fr) auto; gap: 12px; align-items: center; min-height: 104px; border: 1.5px dashed #aabcb3; border-radius: 14px; background: #fafcfb; padding: 18px; cursor: pointer; transition: .15s ease; }
 .file-field:hover { border-color: var(--brand); background: #f4faf7; }
 .file-field.selected { border-style: solid; border-color: #85b6a2; background: #f0f8f4; }
@@ -303,7 +305,7 @@ tbody tr:hover td { background: #fafcfb; }
   .progress-step:nth-child(2)::after { display: none; }
   .step-copy strong, .step-copy small { white-space: normal; }
   .page-intro h1, .section-heading h1 { font-size: clamp(1.75rem, 8vw, 2.2rem); }
-  .file-grid, .source-aside, .settings-row { grid-template-columns: 1fr; }
+  .file-grid, .source-descriptions, .source-aside, .settings-row { grid-template-columns: 1fr; }
   .section-heading, .action-bar { align-items: stretch; flex-direction: column; }
   .section-heading > button { align-self: flex-start; }
   .action-bar .button-row { justify-content: stretch; }

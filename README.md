@@ -42,7 +42,9 @@ Backend host cần một `DATABASE_URL` PostgreSQL phù hợp. Migration đượ
 
 ## Luồng giao diện
 
-Website tổ chức quy trình thành bốn bước: chọn nguồn dữ liệu; khám phá và ánh xạ; kiểm tra chất lượng và chạy đối soát; xem kết quả và xuất báo cáo. Dashboard sắp xếp theo Tổng quan → Phân tích → Tra cứu → Xuất báo cáo. Tìm kiếm và bộ lọc explorer chỉ áp dụng trên trang dữ liệu API đã tải, không thay đổi kết quả hay KPI phía server.
+Website tổ chức quy trình thành bốn bước: chọn nguồn dữ liệu; kiểm tra và ánh xạ; kiểm tra chất lượng và chạy đối soát; xem kết quả và xuất báo cáo. Dashboard sắp xếp theo Tổng quan → Phân tích → Tra cứu → Xuất báo cáo. Tìm kiếm và bộ lọc chỉ áp dụng trên phần dữ liệu đã tải; nút “Tải thêm” lấy trang kế tiếp và giao diện luôn hiển thị riêng số đã tải/tổng số trên server. Chọn mã giao dịch để xem hai phía đối chiếu, phân bổ, bằng chứng và dòng dữ liệu nguồn.
+
+KPI tiền giữ riêng ba thành phần: tiền đã nhận và đối chiếu thành công, điều chỉnh đã xác minh và số còn phải thu. Báo cáo Excel có chín trang tính với nhãn tiếng Việt, định dạng tiền/ngày, bộ lọc và thông tin truy vết nguồn.
 
 Kiểm tra workflow thật bằng Edge headless, bao gồm export và mở lại phiên đã lưu:
 

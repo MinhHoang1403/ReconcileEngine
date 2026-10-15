@@ -5,13 +5,22 @@ const relationshipLabels: Record<string, string> = {
   ONE_TO_ONE: "Một đơn hàng – một giao dịch",
   MANY_ORDERS_ONE_BANK: "Nhiều đơn hàng – một giao dịch",
   ONE_ORDER_MANY_BANKS: "Một đơn hàng – nhiều giao dịch",
-  MANY_TO_MANY: "Nhiều đơn hàng – nhiều giao dịch",
+  AMBIGUOUS_CANDIDATES: "Nhiều phương án cần kiểm tra",
 };
 
 const linkLabels: Record<string, string> = {
   CONFIRMED: "Đã xác nhận",
   PROPOSED: "Đề xuất, chưa xác nhận",
   UNMATCHED: "Chưa tìm thấy đối ứng",
+};
+
+const paymentLabels: Record<string, string> = {
+  FULL: "Đã xác nhận thanh toán đủ",
+  PARTIAL: "Đã xác nhận một phần",
+  OVERPAID: "Đã nhận dư",
+  NO_CONFIRMED_RECEIPT: "Chưa có tiền được xác nhận",
+  UNKNOWN: "Chưa xác định",
+  NOT_ELIGIBLE: "Không đủ điều kiện",
 };
 
 const reasonLabels: Record<string, string> = {
@@ -70,6 +79,8 @@ function OrderCard({ record, currency }: { record: DetailOrder; currency: string
         <div><dt>Số tiền cần thu</dt><dd>{formatMoney(record.expected_amount_minor, currency)}</dd></div>
         <div><dt>Khách hàng</dt><dd>{displayValue(record.customer_name ?? record.customer_id)}</dd></div>
         <div><dt>Mã tham chiếu</dt><dd>{displayValue(record.external_ref)}</dd></div>
+        <div><dt>Kênh thanh toán</dt><dd>{displayValue(record.payment_channel)}</dd></div>
+        <div><dt>Nội dung đơn hàng</dt><dd>{displayValue(record.description)}</dd></div>
       </dl>
       <SourceBlock record={record} />
     </article>
@@ -84,7 +95,9 @@ function BankCard({ record, currency }: { record: DetailBankTransaction; currenc
         <div><dt>Ngày giao dịch</dt><dd>{displayValue(record.txn_date)}</dd></div>
         <div><dt>Số tiền đã ghi nhận</dt><dd>{formatMoney(record.posted_amount_minor, currency)}</dd></div>
         <div><dt>Người chuyển</dt><dd>{displayValue(record.sender_name)}</dd></div>
-        <div><dt>Nội dung / tham chiếu</dt><dd>{displayValue(record.description ?? record.txn_ref)}</dd></div>
+        <div><dt>Mã tham chiếu</dt><dd>{displayValue(record.txn_ref)}</dd></div>
+        <div><dt>Nội dung chuyển khoản</dt><dd>{displayValue(record.description)}</dd></div>
+        <div><dt>Kênh thanh toán</dt><dd>{displayValue(record.channel)}</dd></div>
       </dl>
       <SourceBlock record={record} />
     </article>
@@ -97,6 +110,9 @@ export function TransactionDetailDrawer({ detail, currency, onClose }: {
   onClose: () => void;
 }) {
   const relationship = detail.overview.relationship_types.map((value) => relationshipLabels[value] ?? value).join(", ");
+  const paymentStatuses = Object.entries(detail.overview.payment_statuses)
+    .map(([orderId, status]) => `${orderId}: ${paymentLabels[status] ?? status}`)
+    .join(" · ");
   return (
     <DetailDrawer
       title="Chi tiết đối chiếu"
@@ -106,6 +122,7 @@ export function TransactionDetailDrawer({ detail, currency, onClose }: {
       <p className="detail-guidance">{detail.guidance_vi}</p>
       <section className="detail-summary-grid" aria-label="Tổng hợp số tiền">
         <div><span>Quan hệ đối chiếu</span><strong>{relationship || "Chưa có quan hệ"}</strong></div>
+        <div><span>Trạng thái thanh toán</span><strong>{paymentStatuses || "Chưa xác định"}</strong></div>
         <div><span>Tiền cần thu</span><strong>{formatMoney(detail.overview.expected_amount_minor, currency)}</strong></div>
         <div><span>Tiền đã ghi nhận</span><strong>{formatMoney(detail.overview.posted_amount_minor, currency)}</strong></div>
         <div><span>Tiền đã phân bổ</span><strong>{formatMoney(detail.overview.allocated_cash_minor, currency)}</strong></div>
@@ -133,7 +150,7 @@ export function TransactionDetailDrawer({ detail, currency, onClose }: {
       {detail.adjustments.length > 0 && <section className="drawer-section"><h3>Điều chỉnh đã xác minh</h3>{detail.adjustments.map((item, index) => <p key={String(item.adjustment_id ?? index)}>{displayValue(item.adjustment_type)}: {formatMoney(item.amount_minor, currency)} · Bằng chứng: {displayValue(item.evidence_reference)}</p>)}</section>}
 
       <section className="drawer-section">
-        <h3>Bằng chứng và lý do</h3>
+        <h3>Vì sao hệ thống đưa ra kết quả này?</h3>
         {detail.groups.map((group) => <div className="evidence-item" key={group.group_id}><strong>{group.evidence.explanation_vi}</strong><p>Quy tắc: {group.evidence.rule_id}</p>{group.evidence.reason_codes.length > 0 && <p>{group.evidence.reason_codes.map((code) => reasonLabels[code] ?? code).join(" · ")}</p>}</div>)}
         {detail.exceptions.map((item) => <div className="evidence-item" key={item.exception_id}><strong>{item.reason_codes.map((code) => reasonLabels[code] ?? code).join(" · ")}</strong><p>Giá trị cần kiểm tra: {formatMoney(item.risk_amount_minor, currency)}</p></div>)}
         {detail.groups.length === 0 && detail.exceptions.length === 0 && <p>Chưa có bằng chứng đủ mạnh để tạo quan hệ đối chiếu.</p>}

@@ -189,11 +189,21 @@ def main() -> None:
         assert source_evidence["externalFonts"] == 0
 
         click_button(devtools, "Sử dụng dữ liệu mẫu")
-        wait_until(devtools, "document.body.innerText.includes('Khám phá và ánh xạ dữ liệu')")
+        wait_until(devtools, "document.body.innerText.includes('Kiểm tra và chuẩn hóa dữ liệu')")
         capture(devtools, stage_path("mapping"))
-        click_button(devtools, "Xác nhận ánh xạ")
+        click_button(devtools, "Chuẩn hóa dữ liệu")
         wait_until(devtools, "document.body.innerText.includes('Dữ liệu sẵn sàng đối soát')")
         capture(devtools, stage_path("health"))
+        click_button(devtools, "Xem dòng dữ liệu liên quan")
+        wait_until(devtools, "document.body.innerText.includes('Chi tiết vấn đề dữ liệu')")
+        capture(devtools, stage_path("health-detail"))
+        health_detail = devtools.evaluate(
+            "({rows: document.querySelectorAll('.source-record').length, "
+            "hasSource: document.body.innerText.includes('bank.csv')})"
+        )
+        assert health_detail["rows"] >= 1
+        assert health_detail["hasSource"] is True
+        devtools.evaluate("document.querySelector('[aria-label=\"Đóng chi tiết\"]')?.click()")
         click_button(devtools, "Ghi nhận cảnh báo")
         wait_until(devtools, "document.body.innerText.includes('Đã ghi nhận cảnh báo')")
         click_button(devtools, "Chạy đối soát")
@@ -207,19 +217,38 @@ def main() -> None:
             "exportHref: document.querySelector('a[href*=\"exports?format=xlsx\"]')?.getAttribute('href'), "
             "charts: document.querySelectorAll('.js-plotly-plot').length, "
             "tabs: document.querySelectorAll('[role=tab]').length, "
+            "adjustmentBridge: document.body.innerText.includes('2.000') && "
+            "document.body.innerText.includes('điều chỉnh đã xác minh'), "
+            "pagination: document.body.innerText.includes('Đã tải 50 / tổng 100'), "
             "runLabel: [...document.querySelectorAll('.eyebrow')].map(x => x.textContent)"
-            ".find(x => x.startsWith('RUN ')), "
+            ".find(x => x.startsWith('MÃ PHIÊN ')), "
             "width: innerWidth, height: innerHeight, scrollWidth: document.documentElement.scrollWidth})"
         )
         assert evidence["conservation"] is True
         assert evidence["kpiBaseline"] is True
         assert evidence["charts"] == 2
         assert evidence["tabs"] == 4
+        assert evidence["adjustmentBridge"] is True
+        assert evidence["pagination"] is True
         assert evidence["scrollWidth"] <= evidence["width"]
         assert evidence["exportHref"]
         run_id_match = re.search(r"/api/runs/([^/]+)/exports", evidence["exportHref"])
         assert run_id_match
         run_id = run_id_match.group(1)
+
+        click_button(devtools, "ORD00001")
+        wait_until(devtools, "document.body.innerText.includes('Chi tiết đối chiếu')")
+        capture(devtools, stage_path("transaction-detail"))
+        detail_evidence = devtools.evaluate(
+            "({hasSource: document.body.innerText.includes('orders.csv') && "
+            "document.body.innerText.includes('bank.csv'), "
+            "hasAllocation: document.body.innerText.includes('Phân bổ tiền đã xác nhận')})"
+        )
+        assert detail_evidence["hasSource"] is True
+        assert detail_evidence["hasAllocation"] is True
+        devtools.evaluate("document.querySelector('[aria-label=\"Đóng chi tiết\"]')?.click()")
+        click_button(devtools, "Tải thêm")
+        wait_until(devtools, "document.body.innerText.includes('Đã tải 100 / tổng 100')")
 
         export_evidence = devtools.evaluate(
             "(async () => { const r = await fetch(document.querySelector('a[href*=\"exports?format=xlsx\"]')?.href); "

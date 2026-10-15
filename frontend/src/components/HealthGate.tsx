@@ -45,7 +45,7 @@ export function HealthGate({ health, busy, onAcknowledge, onExclude, onRun, onBa
       </div>
 
       <div className={`gate-callout ${ready ? "ready" : "blocked"}`} role="status">
-        <strong>{ready ? "Có thể chạy engine" : "Chưa thể chạy engine"}</strong>
+        <strong>{ready ? "Có thể bắt đầu đối soát" : "Chưa thể bắt đầu đối soát"}</strong>
         <span>
           {ready
             ? "Các lỗi chặn đã được xử lý. Cảnh báo còn lại vẫn được đưa vào báo cáo ngoại lệ."
@@ -81,13 +81,14 @@ export function HealthGate({ health, busy, onAcknowledge, onExclude, onRun, onBa
                     {issue.source_rows.length > 0 && <p>Dòng nguồn: {issue.source_rows.join(", ")}</p>}
                     <details>
                       <summary>Chi tiết kỹ thuật</summary>
-                      <code>{issue.code}</code> · feed <code>{issue.feed}</code>
+                      <code>{issue.code}</code> · nguồn <code>{issue.feed}</code>
                       {issue.sample_values.length > 0 && <p>Giá trị mẫu: {issue.sample_values.join(", ")}</p>}
                     </details>
                     {issue.source_rows.length > 0 && (
                       <button className="text-button issue-action" type="button" disabled={busy} onClick={() => {
                         setDetailError(null);
-                        void api.healthIssueDetail(health.session_id, index).then(setDetail).catch((error: Error) => setDetailError(error.message));
+                        const issueIndex = health.report.issues.indexOf(issue);
+                        void api.healthIssueDetail(health.session_id, issueIndex).then(setDetail).catch((error: Error) => setDetailError(error.message));
                       }}>
                         Xem dòng dữ liệu liên quan
                       </button>
@@ -126,7 +127,7 @@ export function HealthGate({ health, busy, onAcknowledge, onExclude, onRun, onBa
       <div className="action-bar">
         <div>
           <strong>Quyết định kiểm soát</strong>
-          <p>Cảnh báo và proposal không được tính vào KPI đã xác nhận.</p>
+          <p>Cảnh báo và đề xuất ghép chưa xác nhận không được tính vào KPI tiền.</p>
         </div>
         <div className="button-row">
           <button className="secondary" type="button" onClick={onBack} disabled={busy}>Quay lại ánh xạ</button>
@@ -136,7 +137,7 @@ export function HealthGate({ health, busy, onAcknowledge, onExclude, onRun, onBa
             </button>
           )}
           <button className="primary" type="button" disabled={busy || !ready} onClick={onRun}>
-            {busy ? <><span className="spinner" aria-hidden="true" />Engine đang chạy…</> : "Chạy đối soát"}
+            {busy ? <><span className="spinner" aria-hidden="true" />Đang đối soát…</> : "Chạy đối soát"}
           </button>
         </div>
       </div>

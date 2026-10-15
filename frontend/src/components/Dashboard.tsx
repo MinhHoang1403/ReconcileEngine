@@ -37,7 +37,7 @@ const groupType: Record<string, string> = {
   ONE_TO_ONE: "Một đơn – một giao dịch",
   MANY_ORDERS_ONE_BANK: "Nhiều đơn – một giao dịch",
   ONE_ORDER_MANY_BANKS: "Một đơn – nhiều giao dịch",
-  MANY_TO_MANY: "Nhiều đơn – nhiều giao dịch",
+  AMBIGUOUS_CANDIDATES: "Nhiều phương án cần kiểm tra",
 };
 const reasonCode: Record<string, string> = {
   ORPHAN_BANK: "Chưa tìm thấy đơn hàng tương ứng",
@@ -49,10 +49,10 @@ const reasonCode: Record<string, string> = {
   FUZZY_REFERENCE: "Tham chiếu gần giống, cần kiểm tra",
 };
 const layerLabels: Record<string, string> = {
-  L1: "Mã tham chiếu rõ ràng",
-  L2: "Quy tắc nghiệp vụ có ràng buộc",
-  L3: "Tham chiếu gần giống",
-  L4: "Ghép nhóm hoặc tách khoản",
+  L1: "Mã giao dịch/đơn hàng rõ ràng",
+  L2: "Mã kết hợp điều kiện ngày, tiền hoặc chính sách",
+  L3: "Đề xuất từ thông tin gần giống",
+  L4: "Đề xuất thanh toán gộp hoặc chia nhiều lần",
 };
 
 function formatMoney(value: unknown, currency: string): string {
@@ -215,7 +215,7 @@ export function Dashboard({
             <Plot
               data={[
                 { type: "bar", name: "Đã xác nhận", x: layers.map((layer) => layerLabels[layer] ?? layer), y: layers.map((layer) => data.layer_counts[layer].confirmed_groups), marker: { color: "#176b4d" } },
-                { type: "bar", name: "Đề xuất, chưa xác nhận", x: layers.map((layer) => layerLabels[layer] ?? layer), y: layers.map((layer) => data.layer_counts[layer].proposed_groups), marker: { color: "#d49320" } },
+                { type: "bar", name: "Đang được đề xuất kiểm tra", x: layers.map((layer) => layerLabels[layer] ?? layer), y: layers.map((layer) => data.layer_counts[layer].proposed_groups), marker: { color: "#d49320" } },
               ]}
               layout={{ barmode: "stack", margin: { l: 52, r: 14, t: 18, b: 82 }, yaxis: { title: { text: "Số nhóm giao dịch" }, rangemode: "tozero", dtick: 1 }, paper_bgcolor: "transparent", plot_bgcolor: "transparent", autosize: true, legend: { orientation: "h" }, font: { family: "Segoe UI, Arial, sans-serif", color: "#44534c" } }}
               config={{ displayModeBar: false, responsive: true }} useResizeHandler style={{ width: "100%", height: 330 }}

@@ -77,6 +77,10 @@ export function SourceWorkspace(props: Props) {
             <FileField id="orders-file" label="Danh sách đơn hàng cần thu tiền" hint="CSV hoặc XLSX" file={props.ordersFile} onFile={props.onOrdersFile} />
             <FileField id="bank-file" label="Danh sách giao dịch thanh toán" hint="CSV hoặc XLSX" file={props.bankFile} onFile={props.onBankFile} />
           </div>
+          <div className="source-descriptions">
+            <p><strong>File đơn hàng:</strong> chứa thông tin đơn hàng và số tiền cần nhận.</p>
+            <p><strong>File giao dịch:</strong> chứa các khoản tiền đã được ngân hàng hoặc cổng thanh toán ghi nhận.</p>
+          </div>
           <div className="upload-requirements" aria-label="Yêu cầu upload">
             <span>CSV hoặc XLSX</span><span>Tối đa 25 MB mỗi file</span><span>Tối đa 100.000 dòng</span>
           </div>
@@ -90,7 +94,7 @@ export function SourceWorkspace(props: Props) {
           <article className="surface aside-card demo-card">
             <span className="section-index">DỮ LIỆU MẪU</span>
             <h2>Khám phá nhanh SmartRecon</h2>
-            <p>Bộ dữ liệu tổng hợp bằng VND có các ca 1:1, gộp, chia, thiếu, thừa và giao dịch chưa đủ bằng chứng.</p>
+            <p>Dùng dữ liệu mô phỏng để thử các tình huống thực tế: thanh toán một hoặc nhiều đơn, trả nhiều lần, trả thiếu, trả dư và giao dịch chưa rõ nguồn gốc cần kiểm tra.</p>
             <button className="secondary accent" type="button" disabled={props.busy || !props.serviceReady} onClick={props.onDemo}>
               {props.busy ? "Đang chuẩn bị…" : "Sử dụng dữ liệu mẫu"}
             </button>

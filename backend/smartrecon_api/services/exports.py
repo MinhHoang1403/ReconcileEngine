@@ -130,8 +130,10 @@ def _order_rows(
 ) -> list[dict[str, Any]]:
     allocated: dict[str, int] = {}
     adjustments: dict[str, int] = {}
+    related_banks: dict[str, list[str]] = {}
     for edge in result.get("allocations", []):
         allocated[edge["order_id"]] = allocated.get(edge["order_id"], 0) + edge["allocated_cash_minor"]
+        related_banks.setdefault(edge["order_id"], []).append(edge["bank_txn_id"])
     for adjustment in result.get("adjustments", []):
         adjustments[adjustment["order_id"]] = adjustments.get(adjustment["order_id"], 0) + adjustment["amount_minor"]
     file_meta = source_manifest.get("files", {}).get("orders", {})
@@ -151,6 +153,7 @@ def _order_rows(
                         result.get("payment_statuses", {}).get(order_id, ""),
                         result.get("payment_statuses", {}).get(order_id, ""),
                     ),
+                    "Mã giao dịch liên quan": _joined(dict.fromkeys(related_banks.get(order_id, []))),
                     "Trạng thái đơn hàng": ORDER_STATUS.get(item.get("order_status", ""), item.get("order_status", "")),
                     "Loại tiền": item.get("currency", ""),
                     "Mã tham chiếu": item.get("external_ref", ""),
@@ -171,8 +174,10 @@ def _bank_rows(
     source_manifest: dict[str, Any],
 ) -> list[dict[str, Any]]:
     allocated: dict[str, int] = {}
+    related_orders: dict[str, list[str]] = {}
     for edge in result.get("allocations", []):
         allocated[edge["bank_txn_id"]] = allocated.get(edge["bank_txn_id"], 0) + edge["allocated_cash_minor"]
+        related_orders.setdefault(edge["bank_txn_id"], []).append(edge["order_id"])
     file_meta = source_manifest.get("files", {}).get("bank", {})
     rows = []
     for item in result.get("bank_transactions", []):
@@ -190,6 +195,7 @@ def _bank_rows(
                     "Số tiền ghi nhận": item.get("posted_amount_minor", 0),
                     "Tiền đã phân bổ": allocated.get(bank_id, 0),
                     "Tiền chưa phân bổ": result.get("bank_unapplied_minor", {}).get(bank_id, 0),
+                    "Mã đơn hàng liên quan": _joined(dict.fromkeys(related_orders.get(bank_id, []))),
                     "Cơ sở số tiền": AMOUNT_BASIS.get(item.get("amount_basis", ""), item.get("amount_basis", "")),
                     "Loại tiền": item.get("currency", ""),
                     "Nội dung": item.get("description", ""),
@@ -304,10 +310,7 @@ def _write_overview(
     metadata = [
         ("Mã phiên đối soát", run_id),
         ("Lần sửa dữ liệu", revision),
-        (
-            "Thời điểm hoàn thành",
-            _display_datetime(run_metadata.get("completed_at") or run_metadata.get("created_at") or datetime.now(UTC)),
-        ),
+        ("Ngày tạo báo cáo", _display_datetime(datetime.now(UTC))),
         ("Loại tiền", result.get("kpis", {}).get("currency", run_metadata.get("currency", ""))),
         ("Số đơn hàng", len(result.get("orders", []))),
         ("Số giao dịch thanh toán", len(result.get("bank_transactions", []))),
@@ -349,6 +352,11 @@ def _write_overview(
             "Trường hợp cần kiểm tra",
             kpis.get("unresolved_exceptions_count", 0),
             "Các trường hợp chưa đủ bằng chứng hoặc còn chênh lệch.",
+        ),
+        (
+            "Số nhóm đã đối chiếu thành công",
+            sum(item.get("link_status") == "CONFIRMED" for item in result.get("groups", [])),
+            "Số quan hệ đối chiếu đã tạo phân bổ tiền.",
         ),
     ]
     worksheet.write_row(10, 0, ["Chỉ số", "Giá trị", "Cách hiểu"], section)
@@ -504,6 +512,7 @@ def create_excel_export(
                 "Điều chỉnh đã xác minh",
                 "Số tiền còn phải thu",
                 "Trạng thái thanh toán",
+                "Mã giao dịch liên quan",
                 "Trạng thái đơn hàng",
                 "Loại tiền",
                 "Mã tham chiếu",
@@ -531,6 +540,7 @@ def create_excel_export(
                 "Số tiền ghi nhận",
                 "Tiền đã phân bổ",
                 "Tiền chưa phân bổ",
+                "Mã đơn hàng liên quan",
                 "Cơ sở số tiền",
                 "Loại tiền",
                 "Nội dung",

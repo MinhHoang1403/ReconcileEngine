@@ -19,25 +19,29 @@ API HTTP không gắn nhãn phiên bản trong path. OpenAPI tương tác có t�
 | POST | `/api/uploads/inspect` | Hai file `orders_file` + `bank_file`, hoặc một `workbook_file` hai sheet |
 | POST | `/api/uploads/{session_id}/mapping` | Standardized EDA và Health Gate |
 | GET | `/api/uploads/{session_id}/health` | Health snapshot đã lưu |
+| GET | `/api/uploads/{session_id}/health/issues/{issue_index}` | Dòng nguồn, giá trị gốc/chuẩn hóa và hướng xử lý của một vấn đề chất lượng |
 | POST | `/api/uploads/{session_id}/resolutions` | Exclude có lý do/acknowledge và chạy lại gate |
 | POST | `/api/runs` | Chạy một snapshot bằng Python Core duy nhất |
 | GET | `/api/runs/{run_id}` | Metadata/policy để mở lại run |
 | GET | `/api/runs/{run_id}/dashboard` | KPI, layer counts, payment statuses và conservation |
 | GET | `/api/runs/{run_id}/groups` | Nhóm ghép, phân trang; lọc `link_status` |
-| GET | `/api/runs/{run_id}/groups/{group_id}` | Nhóm và allocation edges |
+| GET | `/api/runs/{run_id}/groups/{group_id}` | Nhóm, bản ghi hai phía, allocation edges, bằng chứng và lineage nguồn |
 | GET | `/api/runs/{run_id}/orders` | Khoản phải thu + allocated/outstanding/status, phân trang |
+| GET | `/api/runs/{run_id}/orders/{order_id}` | Chi tiết quan hệ, nguồn, phân bổ, điều chỉnh và ngoại lệ của một đơn hàng |
 | GET | `/api/runs/{run_id}/bank-transactions` | Bank rows + allocated/unapplied, phân trang |
+| GET | `/api/runs/{run_id}/bank-transactions/{bank_txn_id}` | Chi tiết quan hệ và truy vết của một giao dịch thanh toán |
 | GET | `/api/runs/{run_id}/exceptions` | Exception cases, phân trang |
+| GET | `/api/runs/{run_id}/exceptions/{exception_id}` | Chi tiết các bản ghi và bằng chứng liên quan đến một exception |
 | GET | `/api/runs/{run_id}/exports?format=xlsx` | Workbook chín sheet của effective revision |
 
-Các endpoint danh sách nhận `page >= 1`, `1 <= page_size <= 200`; response là `{items, page, page_size, total}`. Dữ liệu lớn không được trả toàn bộ trong một JSON.
+Các endpoint danh sách nhận `page >= 1`, `1 <= page_size <= 200`; response là `{items, page, page_size, total}`. Frontend tải 50 bản ghi mỗi lần và luôn tách “đã tải” khỏi tổng số trên server. Dữ liệu lớn không được trả toàn bộ trong một JSON.
 
 ## Upload và an toàn
 
 - Cho phép `.csv`, `.xlsx`; tối đa 25 MB/file, 100.000 rows, 200 columns và 20 sheets.
 - Reader kiểm tra extension, MIME, magic/ZIP content và uncompressed size; không chạy macro hay công thức.
 - Tên file phía client không được dùng làm đường dẫn lưu trữ. Artifact nằm dưới volume root với server-generated UUID và SHA-256.
-- Export đặt chuỗi bắt đầu bằng `=`, `+`, `-`, `@` thành text, đồng thời tắt tự động formula/URL của writer.
+- Export đặt chuỗi bắt đầu bằng `=`, `+`, `-`, `@` thành text, đồng thời tắt tự động formula/URL của writer. Workbook dùng nhãn tiếng Việt, giữ số tiền ở dạng số, ngày ở dạng ngày, không đưa JSON thô vào ô người dùng.
 - Ground truth synthetic không có trong response hoặc runtime input của API.
 
 ## Lỗi ổn định
@@ -46,4 +50,4 @@ Lỗi nghiệp vụ trả `detail.error_code` và thông điệp tiếng Việt.
 
 ## Snapshot và tiền
 
-Một run lưu mapping/policy, input hashes, rule identifier, semantic checksum, canonical Parquet, result JSON, groups, allocation edges và artifact manifest. `conservation.is_valid` chỉ đúng khi mọi phương trình bank/order/toàn run không có vi phạm. Proposed groups không tạo allocation và không đi vào confirmed KPI.
+Một run lưu mapping/policy, input hashes, rule identifier, semantic checksum, canonical Parquet, result JSON, groups, allocation edges và artifact manifest. `conservation.is_valid` chỉ đúng khi mọi phương trình bank/order/toàn run không có vi phạm. Proposed groups không tạo allocation và không đi vào confirmed KPI. Điều chỉnh đã xác minh là thành phần phi tiền mặt riêng: `expected = confirmed cash + verified adjustments + outstanding`; không được gộp vào tiền mặt đã nhận.

@@ -72,7 +72,7 @@ def test_formula_injection_is_exported_as_text(tmp_path: Path, monkeypatch) -> N
     assert amount_cell.data_type == "n"
     assert amount_cell.number_format == "#,##0;[Red](#,##0);-"
     assert date_cell.number_format == "dd/mm/yyyy"
-    assert sheet.auto_filter.ref == "A1:T2"
+    assert sheet.auto_filter.ref == "A1:U2"
     assert sheet.freeze_panes == "A2"
     assert sheet.cell(row=2, column=headers.index("Tệp nguồn") + 1).value == "orders.csv"
     assert all(cell.data_type != "f" for worksheet in workbook.worksheets for row in worksheet for cell in row)

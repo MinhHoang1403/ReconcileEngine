@@ -230,7 +230,8 @@ def test_demo_to_export_uses_one_persisted_run(tmp_path: Path, monkeypatch) -> N
     assert fee_order[order_headers.index("Số tiền còn phải thu")].value == 0
     assert fee_order[order_headers.index("Tệp nguồn")].value == "orders.csv"
     assert fee_order[order_headers.index("Dòng nguồn")].value == 19
-    assert order_sheet.auto_filter.ref == f"A1:T{order_sheet.max_row}"
+    assert order_sheet.auto_filter.ref == f"A1:U{order_sheet.max_row}"
+    assert fee_order[order_headers.index("Mã giao dịch liên quan")].value == "TXN00016"
     assert order_sheet.freeze_panes == "A2"
 
     assert all(
