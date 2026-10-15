@@ -43,7 +43,7 @@ class ReconciliationRun(Base):
     currency: Mapped[str] = mapped_column(String(3), nullable=False)
     policy_snapshot: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
     mapping_snapshot: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
-    semantic_checksum: Mapped[str | None] = mapped_column(String(64), unique=True)
+    semantic_checksum: Mapped[str | None] = mapped_column(String(64), index=True)
     current_revision: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

@@ -1,5 +1,8 @@
 import { render, screen } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vitest";
+
+vi.mock("./components/Dashboard", () => ({ Dashboard: () => null }));
+
 import { App } from "./App";
 
 afterEach(() => {
@@ -11,6 +14,5 @@ test("hiển thị trạng thái sẵn sàng từ API", async () => {
     new Response(JSON.stringify({ status: "ok", database: "ok" }), { status: 200 }),
   );
   render(<App />);
-  expect(await screen.findByText("Backend và PostgreSQL đã sẵn sàng")).toBeInTheDocument();
+  expect(await screen.findByText("Hệ thống sẵn sàng")).toBeInTheDocument();
 });
-

@@ -64,3 +64,22 @@ def test_duckdb_analytics_cross_checks_effective_edge_totals() -> None:
     assert totals["allocated_cash_minor"] == result.kpis["confirmed_cash_allocated_minor"]
     assert totals["orders_count"] == result.kpis["confirmed_link_orders_count"]
     assert totals["bank_rows_count"] == result.kpis["confirmed_bank_rows_count"]
+
+
+def test_semantic_checksum_normalizes_equivalent_numeric_policy_values() -> None:
+    raw = read_source_bundle(
+        orders_path=DEMO_DIR / "internal_receivables.csv",
+        bank_path=DEMO_DIR / "bank_transactions.csv",
+    )
+    normalized = normalize_bundle(raw, default_demo_mapping())
+
+    integer_threshold = run_reconciliation(
+        normalized,
+        ReconciliationPolicy(currency=Currency.VND, fuzzy_candidate_threshold=85),
+    )
+    float_threshold = run_reconciliation(
+        normalized,
+        ReconciliationPolicy(currency=Currency.VND, fuzzy_candidate_threshold=85.0),
+    )
+
+    assert integer_threshold.semantic_checksum == float_threshold.semantic_checksum

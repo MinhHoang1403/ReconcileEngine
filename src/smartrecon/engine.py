@@ -273,6 +273,10 @@ def _semantic_checksum(
         payload.pop("lineage", None)
         return payload
 
+    policy_payload = asdict(policy)
+    # JSON distinguishes 85 from 85.0 even though the policy does not. Normalize
+    # the sole floating threshold so semantically identical callers hash alike.
+    policy_payload["fuzzy_candidate_threshold"] = float(policy.fuzzy_candidate_threshold)
     payload = {
         "orders": [clean(item) for item in sorted(orders, key=lambda row: row.order_id)],
         "banks": [clean(item) for item in sorted(banks, key=lambda row: row.bank_txn_id)],
@@ -281,7 +285,7 @@ def _semantic_checksum(
         "adjustments": [clean(item) for item in resolution.adjustments],
         "exceptions": [clean(item) for item in exceptions],
         "kpis": kpis,
-        "policy": asdict(policy),
+        "policy": policy_payload,
     }
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str).encode()
     return hashlib.sha256(encoded).hexdigest()

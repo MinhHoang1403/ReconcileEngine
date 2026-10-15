@@ -49,6 +49,8 @@ Backend host cần một `DATABASE_URL` PostgreSQL phù hợp. Migration đượ
 
 Chi tiết kiến trúc và hợp đồng nghiệp vụ nằm trong `docs/`.
 
+Luồng API và mã lỗi được mô tả tại `docs/API_CONTRACT.md`. Giao diện cho phép dán một `run_id` để mở lại dashboard và export từ PostgreSQL/artifact volume sau khi container khởi động lại.
+
 ## Sinh lại dữ liệu demo
 
 Bộ VND gồm 100 khoản phải thu và feed bank/PSP synthetic. Truth được ghi ra file riêng, không nằm trong hai feed nghiệp vụ:
