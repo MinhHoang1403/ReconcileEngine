@@ -22,9 +22,12 @@ from backend.smartrecon_api.services.serialization import to_jsonable
 from smartrecon.ingest.eda import eda_to_dict, summarize_raw, summarize_standardized
 from smartrecon.ingest.health import Exclusion, apply_exclusions, build_health_report
 from smartrecon.ingest.mapping import (
+    BANK_FIELDS,
     BANK_REQUIRED,
+    ORDER_FIELDS,
     ORDER_REQUIRED,
     MappingConfig,
+    analyze_mapping,
     default_demo_mapping,
     suggest_mapping,
 )
@@ -101,6 +104,20 @@ def _persist_inspection(
     mapping: MappingConfig | None = None,
     dataset_profile: str = "uploaded",
 ) -> dict[str, Any]:
+    order_analysis = analyze_mapping(
+        raw.orders.frame,
+        ORDER_FIELDS,
+        feed="orders",
+        required_fields=ORDER_REQUIRED,
+        profile_mapping=mapping.order_columns if mapping else None,
+    )
+    bank_analysis = analyze_mapping(
+        raw.bank_transactions.frame,
+        BANK_FIELDS,
+        feed="bank_transactions",
+        required_fields=BANK_REQUIRED,
+        profile_mapping=mapping.bank_columns if mapping else None,
+    )
     order_suggestions = suggest_mapping(
         list(raw.orders.frame.columns),
         ORDER_REQUIRED
@@ -166,6 +183,10 @@ def _persist_inspection(
         "suggested_mapping": {
             "order_columns": order_suggestions,
             "bank_columns": bank_suggestions,
+        },
+        "mapping_suggestions": {
+            "orders": to_jsonable(order_analysis),
+            "bank_transactions": to_jsonable(bank_analysis),
         },
         "detected_structure": {
             "orders": to_jsonable(raw.orders.structure),

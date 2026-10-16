@@ -158,6 +158,16 @@ def test_demo_to_export_uses_one_persisted_run(tmp_path: Path, monkeypatch) -> N
             assert demo.status_code == 200
             inspection = demo.json()
             assert "truth" not in demo.text.lower()
+            assert inspection["mapping_suggestions"]["orders"]["required_auto_selected"] == 3
+            assert inspection["mapping_suggestions"]["bank_transactions"]["required_auto_selected"] == 5
+            bank_targets = {
+                item["canonical_target"]: item
+                for item in inspection["mapping_suggestions"]["bank_transactions"]["suggestions"]
+            }
+            assert bank_targets["posted_amount"]["status"] == "auto-selected"
+            assert bank_targets["posted_amount"]["reasons"]
+            selected_sources = inspection["mapping_suggestions"]["bank_transactions"]["selected_mapping"].values()
+            assert len(set(selected_sources)) == len(selected_sources)
 
             mapping = {
                 **inspection["suggested_mapping"],

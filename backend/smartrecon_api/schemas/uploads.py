@@ -47,6 +47,7 @@ class InspectionResponse(BaseModel):
     dataset_profile: str
     raw_eda: dict[str, RawEdaResponse]
     suggested_mapping: dict[str, dict[str, str]]
+    mapping_suggestions: dict[str, Any]
     detected_structure: dict[str, Any]
 
 
