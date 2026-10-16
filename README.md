@@ -74,8 +74,21 @@ uv run python scripts/generate_demo.py --seed 42 --orders 100
 
 Xem provenance và giới hạn sử dụng Olist trong `docs/DATA_ATTRIBUTION.md`.
 
+## Notebook và đánh giá
+
+Notebook nghiên cứu dùng trực tiếp cùng public core API với backend, không cần website đang chạy:
+
+```powershell
+uv sync --extra dev
+uv run pytest tests/research/test_research_notebook.py -q
+uv run python scripts/run_evaluation.py --orders 1000 --seed 20261016 --output reports/evaluation_results.json
+```
+
+Mở `notebooks/reconciliation_research.ipynb` để xem EDA, Waterfall L1–L4, conservation, holdout metrics, ablation và hard-profile benchmark. Ground truth chỉ được evaluator đọc sau khi engine chạy. Kết quả, giới hạn và cách diễn giải chỉ số nằm trong `docs/EVALUATION_REPORT.md`.
+
 ## Tài liệu vận hành và nghiệm thu
 
 - `docs/API_CONTRACT.md`: endpoints, DTO, mã lỗi, pagination và an toàn upload/export.
 - `docs/OPERATIONS.md`: hướng dẫn Windows/PowerShell, Docker Desktop/WSL2, restart và chẩn đoán.
+- `docs/EVALUATION_REPORT.md`: protocol, Precision/Recall/F1, ablation, benchmark và giới hạn.
 - `docs/QA_REPORT.md`: lệnh và bằng chứng test/Docker/browser/persistence đã chạy thực tế.

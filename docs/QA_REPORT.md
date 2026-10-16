@@ -8,7 +8,7 @@ Ngày kiểm tra gần nhất: 2026-10-16. Môi trường: Windows/PowerShell, D
 |---|---|---|
 | Python lint | `uv run ruff check .` | Pass |
 | Python format | `uv run ruff format --check .` | Pass |
-| Python tests | `uv run pytest -q` | 94 passed; một deprecation warning từ FastAPI TestClient |
+| Python tests | `uv run pytest -q` | 100 passed; một deprecation warning từ FastAPI TestClient và một warning event loop của Jupyter trên Windows |
 | Golden | `uv run pytest tests/golden -q` | 28 tests pass; catalog đủ 24 fixtures F01–F24, gồm conflict F19 và undo dependency F20 |
 | Property | `uv run pytest tests/property -q` | 4 passed; các bất biến bảo toàn tiền đạt |
 | VND/CSV/XLSX/API | `uv run pytest tests/unit/test_money.py tests/integration/test_ingestion.py tests/api/test_workflow.py -q` | 36 passed |
@@ -42,6 +42,14 @@ Dashboard đọc analytics từ immutable result snapshot và audit actions đ�
 Excel giữ nguyên chín sheet, bổ sung `Trạng thái xác minh` trong group sheets và review audit thật gồm revision, allocation delta, note, actor label và liên kết undo. API export nhận `expected_revision` và trả 409 khi client cũ. Integration test xác nhận workbook revision 1 có action approve, group `APPROVED`, tổng allocation bằng KPI dashboard; historical dashboard/explorer revision 1 vẫn đọc đúng sau khi run đã sang revision 2.
 
 Docker/browser acceptance tại `1366x768` dùng run `423395c5-1901-40c8-88ab-6926b38b0637`: approve tạo revision 1, dashboard ghi nhận một proposal `APPROVED` và một approve action; workbook revision 1 trả HTTP 200, 54.829 bytes; undo tạo revision 2 và analytics ghi nhận một undo action. Conservation vẫn hợp lệ, run mở lại được và không có lỗi browser/network. Ảnh analytics được sinh ngoài repository trong thư mục tạm `smartrecon-analytics-c`.
+
+## Notebook và scientific evaluation
+
+`notebooks/reconciliation_research.ipynb` được thực thi từ kernel mới bằng `nbclient`, không cần FastAPI/frontend và import trực tiếp `smartrecon.engine.run_reconciliation`. Notebook tạo EDA, biểu đồ L1–L4, phân tích group/split, oracle conservation, holdout metrics, ablation và benchmark từ dữ liệu thật trong repo; kiểm thử chống đường dẫn tuyệt đối và thất bại nếu bất kỳ cell nào lỗi.
+
+Holdout 47 truth edges đạt edge precision `43/43 = 1,0000`, recall `43/47 = 0,9149`, F1 `0,9556`, group exact precision `43/43`, group recall `43/46`, candidate recall `47/47` và 0 false auto-confirm. Allocation MAE trên hợp predicted/truth edges là 14.893,62 VND, tổng absolute error 700.000 VND do các truth edges review-only được so với prediction bằng 0; các cạnh đã xác nhận đúng không lệch tiền. Thí nghiệm approve hai edges N:1 xác nhận chúng được đếm là reviewed-confirmed riêng và không làm tăng auto-confirm coverage. Benchmark profile 1.000 orders/998 bank rows, seed `20261016`, chạy 3,440 giây với peak `tracemalloc` 9.741.897 bytes trên máy kiểm thử; hashes, policy, phần cứng và giới hạn exact-filler được ghi tại `docs/EVALUATION_REPORT.md`.
+
+Regression checkpoint: Ruff/format pass; 100 Python tests, 28 golden, 4 property và 19 frontend tests pass; frontend build pass, npm audit 0 vulnerabilities. `docker compose up --build -d` build lại backend thành công và `db`, `backend`, `frontend` đều healthy; không xóa named volume. Sau build, PostgreSQL còn 47 runs và API mở lại run `423395c5-1901-40c8-88ab-6926b38b0637` ở revision 2 thành công.
 
 ## Quy tắc VND có phần thập phân
 

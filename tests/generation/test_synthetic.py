@@ -2,6 +2,7 @@ import csv
 import json
 from pathlib import Path
 
+import pytest
 from openpyxl import load_workbook
 
 from smartrecon.generation.synthetic import (
@@ -29,6 +30,14 @@ def test_business_feeds_do_not_leak_truth_fields() -> None:
     bundle = generate_vnd_demo()
     assert not (set(bundle.orders[0]) & BUSINESS_TRUTH_DENYLIST)
     assert not (set(bundle.bank_transactions[0]) & BUSINESS_TRUTH_DENYLIST)
+
+
+def test_evaluation_profile_is_explicit_and_demo_bounds_remain_enforced() -> None:
+    with pytest.raises(ValueError, match="requires 80 to 120"):
+        generate_vnd_demo(order_count=1_000)
+    evaluation = generate_vnd_demo(seed=7, order_count=1_000, profile="evaluation_hard")
+    assert evaluation.manifest["profile"] == "evaluation_hard"
+    assert evaluation.manifest["counts"]["orders"] == 1_000
 
 
 def test_csv_and_workbook_have_equivalent_business_values(tmp_path: Path) -> None:

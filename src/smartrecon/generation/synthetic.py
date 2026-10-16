@@ -177,10 +177,27 @@ def _semantic_hash(payload: object) -> str:
     return hashlib.sha256(encoded).hexdigest()
 
 
-def generate_vnd_demo(seed: int = 42, order_count: int = 100) -> DemoBundle:
-    """Generate 80–120 receivables with explicit hard cases and deterministic filler."""
-    if not 80 <= order_count <= 120:
-        raise ValueError("Demo phải có từ 80 đến 120 orders")
+def generate_vnd_demo(
+    seed: int = 42,
+    order_count: int = 100,
+    *,
+    profile: str = "vn_synthetic_demo",
+) -> DemoBundle:
+    """Generate a deterministic VND dataset without leaking truth into business feeds.
+
+    The committed demo intentionally remains small. The evaluation profile uses
+    the same documented hard cases plus deterministic fillers so a larger
+    benchmark does not silently change reconciliation semantics.
+    """
+    bounds = {
+        "vn_synthetic_demo": (80, 120),
+        "evaluation_hard": (1_000, 3_000),
+    }
+    if profile not in bounds:
+        raise ValueError(f"Unsupported synthetic profile: {profile}")
+    minimum, maximum = bounds[profile]
+    if not minimum <= order_count <= maximum:
+        raise ValueError(f"Profile {profile} requires {minimum} to {maximum} orders")
     rng = random.Random(seed)
     orders: list[dict[str, Any]] = []
     banks: list[dict[str, Any]] = []
@@ -495,8 +512,8 @@ def generate_vnd_demo(seed: int = 42, order_count: int = 100) -> DemoBundle:
         next_index += 1
 
     manifest = {
-        "dataset_id": f"vn-synthetic-demo-seed-{seed}",
-        "profile": "vn_synthetic_demo",
+        "dataset_id": f"{profile.replace('_', '-')}-seed-{seed}",
+        "profile": profile,
         "generator_version": "0.1.0",
         "seed": seed,
         "currency": "VND",
