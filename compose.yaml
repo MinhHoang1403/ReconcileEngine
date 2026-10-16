@@ -1,3 +1,5 @@
+x-backend-image: &backend-image ${BACKEND_IMAGE:-smartrecon-backend:local}
+
 services:
   db:
     image: postgres:17-alpine
@@ -15,10 +17,34 @@ services:
       - pg_data:/var/lib/postgresql/data
     restart: unless-stopped
 
+  migrate:
+    image: *backend-image
+    command: ["uv", "run", "alembic", "upgrade", "head"]
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://smartrecon:change-this-local-password@db:5432/smartrecon}
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
   backend:
+    image: *backend-image
     build:
       context: .
       dockerfile: backend/Dockerfile
+    command:
+      [
+        "uv",
+        "run",
+        "uvicorn",
+        "backend.smartrecon_api.main:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8000",
+        "--workers",
+        "1",
+      ]
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://smartrecon:change-this-local-password@db:5432/smartrecon}
       ARTIFACTS_PATH: /artifacts
@@ -27,6 +53,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     healthcheck:
       test:
         [
@@ -42,12 +70,13 @@ services:
       retries: 12
       start_period: 10s
     ports:
-      - "127.0.0.1:8000:8000"
+      - "127.0.0.1:${BACKEND_PORT:-8000}:8000"
     volumes:
       - artifacts_data:/artifacts
     restart: unless-stopped
 
   frontend:
+    image: ${FRONTEND_IMAGE:-smartrecon-frontend:local}
     build:
       context: .
       dockerfile: frontend/Dockerfile
@@ -69,7 +98,7 @@ services:
       retries: 12
       start_period: 10s
     ports:
-      - "127.0.0.1:5173:5173"
+      - "127.0.0.1:${FRONTEND_PORT:-5173}:5173"
     restart: unless-stopped
 
 volumes:

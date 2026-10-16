@@ -152,3 +152,15 @@ Sau khi chốt quy tắc VND, `docker compose up --build -d` build thành công 
 - Không có auth/RBAC, public HTTPS, external bank API, OCR, FX hoặc queue worker. Demo local không được xem là hệ thống xác thực danh tính người thao tác.
 - Proposal trong review queue không tạo allocation và không đi vào confirmed KPI cho tới khi approve transaction đã commit; reject không tạo allocation và undo không xóa audit history.
 - Frontend Plotly basic bundle còn lớn (~1,48 MB raw, ~487 KB gzip). Đây là tối ưu hiệu năng không chặn demo local; build vẫn pass.
+
+## Release readiness, backup và restore
+
+Checkpoint vận hành ngày 2026-10-16 chuyển migration sang job one-shot `migrate`: job chờ PostgreSQL healthy, chạy `alembic upgrade head` và thoát mã 0; backend chờ job hoàn tất rồi mới chạy Uvicorn. Backend image chạy user `app`, frontend image chạy user `nginx`; PostgreSQL không publish cổng. Lần build đầu đã phát hiện Nginx non-root không ghi được `/run/nginx.pid`; Dockerfile được sửa dùng `/tmp/nginx.pid`, build lại và frontend healthcheck đạt thay vì hạ yêu cầu non-root.
+
+`compose.production.yaml` được validate và khởi động thật bằng project cô lập `smartrecon_prodcheck_20261016`: `db`, `backend`, `frontend` đều healthy, `migrate` `Exited (0)`, API health trả `ok`. Cổng thử chỉ bind loopback; project, network và hai volume thử được xóa sau khi đạt, không tác động stack chính.
+
+Backup thật của run `deff0a5b-690e-4f24-9857-e53448e7afae` tạo custom-format PostgreSQL dump 570.875 bytes (SHA-256 `480ea869d36632564584cad94ca6e1559cce87a1febda7fab6a873e4ad726dd1`) cùng 482 artifact files, tổng 32.680.774 bytes. Restore drill dùng project ngẫu nhiên `smartrecon_restore_1fa8c95d82`, database/artifact volumes và cổng riêng. Sau restore, hệ thống đọc đúng revision 3, ba audit actions, 92 allocation edges tổng 66.531.000 VND, KPI cash 66.531.000 VND, conservation `true` và sinh lại workbook 55.062 bytes. Project/volumes thử được dọn sau khi kiểm tra; stack thật vẫn đọc cùng run/revision/KPI.
+
+Sau `docker compose down` không kèm `-v` và `docker compose up -d`, ba dịch vụ dài hạn trở lại healthy, migration thoát mã 0. PostgreSQL còn 64 runs, 100 run revisions và 479 artifact manifest rows; run revision 3 nói trên vẫn có cash 66.531.000 VND và conservation `true`.
+
+Regression cuối trước commit: Ruff lint/format pass; 103 Python tests pass (hai warning môi trường đã công bố), 28 golden tests, 4 property tests, 19 frontend tests, frontend lint/build và `npm audit` 0 vulnerabilities đều đạt. Evaluation smoke 1.000 orders/998 bank rows chạy 3,112 giây, hard-profile edge F1 `0,9961`, false auto-confirm count `0`; holdout F1 vẫn `0,9556`. Production build còn warning Plotly chunk lớn đã biết, không có test failure.

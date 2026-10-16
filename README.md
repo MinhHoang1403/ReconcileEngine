@@ -38,7 +38,7 @@ npm test
 npm run build
 ```
 
-Backend host cần một `DATABASE_URL` PostgreSQL phù hợp. Migration được chạy tự động khi container backend khởi động; có thể kiểm tra thủ công bằng `uv run alembic upgrade head`.
+Backend host cần một `DATABASE_URL` PostgreSQL phù hợp. Trong Compose, job one-shot `migrate` chạy migration trước khi backend khởi động; trên host có thể chạy có kiểm soát bằng `uv run alembic upgrade head`.
 
 ## Luồng giao diện
 
@@ -100,5 +100,6 @@ Hai file JSON trong `reports/` là runtime evidence theo máy và không đượ
 
 - `docs/API_CONTRACT.md`: endpoints, DTO, mã lỗi, pagination và an toàn upload/export.
 - `docs/OPERATIONS.md`: hướng dẫn Windows/PowerShell, Docker Desktop/WSL2, restart và chẩn đoán.
+- `docs/DEPLOYMENT.md`: cấu hình production, migration one-shot, Linux/HTTPS, backup và restore drill độc lập.
 - `docs/EVALUATION_REPORT.md`: protocol, Precision/Recall/F1, ablation, benchmark và giới hạn.
 - `docs/QA_REPORT.md`: lệnh và bằng chứng test/Docker/browser/persistence đã chạy thực tế.

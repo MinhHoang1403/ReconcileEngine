@@ -16,7 +16,7 @@ docker compose up --build -d
 docker compose ps
 ```
 
-Backend chờ PostgreSQL healthy, chạy `alembic upgrade head`, rồi mới khởi động API. Frontend là static build phục vụ bởi Nginx và reverse proxy `/api`, `/healthz` tới backend.
+Job one-shot `migrate` chờ PostgreSQL healthy và chạy `alembic upgrade head`; backend chỉ khởi động API sau khi job hoàn tất thành công. Frontend là static build phục vụ bởi Nginx và reverse proxy `/api`, `/healthz` tới backend.
 
 - Website: `http://localhost:5173`
 - API health: `http://localhost:8000/healthz`
@@ -30,7 +30,8 @@ Review API yêu cầu client gửi `expected_revision` hiện đang hiển thị
 
 ```powershell
 docker compose ps
-docker compose exec -T backend uv run alembic current
+docker compose ps -a
+docker compose run --rm migrate uv run alembic current
 docker compose logs --tail 200 backend db frontend
 Invoke-RestMethod http://localhost:8000/healthz
 ```
@@ -78,3 +79,5 @@ npm audit
 ```
 
 Không đặt secret thật trong `.env.example`, commit `.env`, hoặc publish PostgreSQL ra host/public network.
+
+Triển khai production, backup cả database/artifacts và restore drill độc lập được hướng dẫn tại `docs/DEPLOYMENT.md`.
