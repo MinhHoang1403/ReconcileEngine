@@ -1,6 +1,6 @@
 # Báo cáo nghiệm thu kỹ thuật
 
-Ngày kiểm tra: 2026-10-15. Môi trường: Windows/PowerShell, Docker Engine 29.7.2, Compose 5.5, Python 3.12 qua `uv`, Node 24.
+Ngày kiểm tra gần nhất: 2026-10-16. Môi trường: Windows/PowerShell, Docker Engine 29.7.2, Compose 5.5, Python 3.12 qua `uv`, Node 24.
 
 ## Kết quả tự động
 
@@ -8,12 +8,12 @@ Ngày kiểm tra: 2026-10-15. Môi trường: Windows/PowerShell, Docker Engine 
 |---|---|---|
 | Python lint | `uv run ruff check .` | Pass |
 | Python format | `uv run ruff format --check .` | Pass |
-| Python tests | `uv run pytest -q` | 89 passed; một deprecation warning từ FastAPI TestClient |
-| Golden | `uv run pytest tests/golden -q` | 26 assertions passed, phủ đúng 22 fixtures F01–F18 và F21–F24 |
+| Python tests | `uv run pytest -q` | 93 passed; một deprecation warning từ FastAPI TestClient |
+| Golden | `uv run pytest tests/golden -q` | 28 tests pass; catalog đủ 24 fixtures F01–F24, gồm conflict F19 và undo dependency F20 |
 | Property | `uv run pytest tests/property -q` | 4 passed; các bất biến bảo toàn tiền đạt |
 | VND/CSV/XLSX/API | `uv run pytest tests/unit/test_money.py tests/integration/test_ingestion.py tests/api/test_workflow.py -q` | 36 passed |
 | Frontend lint | `npm run lint` | Pass |
-| Frontend unit | `npm run test` | 17 passed trong 5 test files |
+| Frontend unit | `npm run test -- --run` | 19 passed trong 6 test files |
 | Frontend build | `npm run build` | Pass; Plotly basic bundle có cảnh báo chunk lớn, không phải lỗi build |
 | Compose | `docker compose config --quiet` | Exit 0 |
 | Images | `docker compose up --build -d` | Backend và frontend build sạch, ba services healthy |
@@ -26,6 +26,14 @@ Ngày 2026-10-16, migration `20261015_03` được áp dụng trên PostgreSQL v
 Acceptance PostgreSQL dùng run synthetic `d63e09ea-4508-4ac5-a36a-fd1ad5c72e75`. Approve nhóm N:1 `CAND-974f668fcf3ccae4` tạo revision 1, hai edges tổng 500.000 VND, nâng confirmed cash từ 66.431.000 lên 66.931.000 VND và conservation vẫn hợp lệ. Retry cùng idempotency key trả lại đúng action cũ; request revision 0 với key mới trả HTTP 409 `STALE_REVISION`. PostgreSQL có đúng một review action, hai run revisions và tổng allocation của `TXN00007` tại revision 1 đúng 500.000 VND.
 
 Kiểm thử rollback gọi approve nhóm M:N không được hỗ trợ ở revision 1: API trả 409, `current_revision` vẫn là 1, số review actions vẫn là 1, không có row revision 2 và không có artifact revision 2. Unit test ép lỗi commit cũng xác nhận rollback về revision 0 và xóa result artifact chưa được công bố.
+
+## Human-in-the-loop workflow
+
+Review queue và history đọc cùng effective revision, có tìm kiếm, lọc loại quan hệ, phân trang, source amounts, allocation preview, evidence, proposal cạnh tranh và lý do khóa approve. UI yêu cầu ghi chú khi reject, ghi rõ `actor_label` không phải danh tính đã xác thực, tự tải lại khi gặp stale revision và dùng lại drawer nguồn/bằng chứng hiện có.
+
+F19 được chạy trên PostgreSQL thật với hai proposal cạnh tranh cùng `TXN00007`: request từ revision 4 đầu tiên tạo revision 5 và đúng hai edges tổng 500.000 VND; request thứ hai vẫn gửi revision 4 trả HTTP 409. Conservation vẫn hợp lệ và bank không bị cấp vượt 500.000 VND. F20 được chạy trên run `32d41d11-58f2-409d-8d51-23c42bb2233b`: sau approve revision 3 và reject downstream revision 4, undo action ở revision 3 trả HTTP 409, current revision vẫn là 4. Unit/API tests cũng xác minh undo hợp lệ tạo revision mới, phục hồi snapshot trước và giữ audit cũ.
+
+Browser smoke Edge headless đi qua upload demo, Health, reconcile, charts, drawer, export, chọn proposal có thể duyệt, xem allocation preview, approve, kiểm tra revision/conservation, undo và mở lại run. Kết quả `review_approve_undo_verified=true`; ảnh kiểm tra nằm ngoài repository trong thư mục tạm `smartrecon-review-checkpoint-b`. Frontend lint pass, 19 tests pass và production build pass; cảnh báo Plotly chunk lớn vẫn là hạn chế đã biết, không phải lỗi build.
 
 ## Quy tắc VND có phần thập phân
 
@@ -77,6 +85,6 @@ Sau khi chốt quy tắc VND, `docker compose up --build -d` build thành công 
 
 ## Phạm vi và hạn chế đã biết
 
-- Không có approve/reject/undo, concurrent review, auth/RBAC, public HTTPS, external bank API, OCR, FX hoặc queue worker; đây là phạm vi sau, không được triển khai sớm.
-- Review queue ở giai đoạn hiện tại chỉ là các proposed groups/candidates có giải thích; chúng không tạo allocation và không đi vào confirmed KPI.
+- Không có auth/RBAC, public HTTPS, external bank API, OCR, FX hoặc queue worker. Demo local không được xem là hệ thống xác thực danh tính người thao tác.
+- Proposal trong review queue không tạo allocation và không đi vào confirmed KPI cho tới khi approve transaction đã commit; reject không tạo allocation và undo không xóa audit history.
 - Frontend Plotly basic bundle còn lớn (~1,48 MB raw, ~487 KB gzip). Đây là tối ưu hiệu năng không chặn demo local; build vẫn pass.

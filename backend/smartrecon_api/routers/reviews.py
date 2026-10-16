@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from backend.smartrecon_api.db.database import get_db
@@ -10,12 +10,15 @@ from backend.smartrecon_api.schemas.reviews import (
     ApproveReviewRequest,
     RejectReviewRequest,
     ReviewActionResponse,
+    ReviewPageResponse,
     UndoReviewRequest,
 )
 from backend.smartrecon_api.services.reviews import (
     ReviewServiceError,
     approve_review,
     reject_review,
+    review_history,
+    review_queue,
     undo_review,
 )
 
@@ -29,6 +32,34 @@ def _translate_error(error: ReviewServiceError) -> HTTPException:
         **error.context,
     }
     return HTTPException(status_code=error.status_code, detail=detail)
+
+
+@router.get("", response_model=ReviewPageResponse)
+def get_queue(
+    run_id: str,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=200),
+    query: str | None = Query(default=None, max_length=200),
+    group_type: str | None = None,
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    try:
+        return review_queue(db, run_id, page, page_size, query, group_type)
+    except ReviewServiceError as error:
+        raise _translate_error(error) from error
+
+
+@router.get("/history", response_model=ReviewPageResponse)
+def get_history(
+    run_id: str,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=200),
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    try:
+        return review_history(db, run_id, page, page_size)
+    except ReviewServiceError as error:
+        raise _translate_error(error) from error
 
 
 @router.post("/approve", response_model=ReviewActionResponse)

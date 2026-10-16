@@ -334,6 +334,60 @@ def main() -> None:
         assert export_evidence["status"] == 200
         assert export_evidence["bytes"] > 1000
 
+        review_opened = devtools.evaluate(
+            "(() => { const row = [...document.querySelectorAll('.review-table tbody tr')]"
+            ".find(item => item.querySelector('.status-proposed')); "
+            "const button = row?.querySelector('button'); if (!button) return false; "
+            "button.click(); return true; })()"
+        )
+        assert review_opened is True
+        wait_until(devtools, "Boolean(document.querySelector('.review-decision'))")
+        review_preview = devtools.evaluate(
+            "({allocations: document.querySelectorAll('.allocation-preview strong').length, "
+            "approveEnabled: !document.querySelector('.review-decision .primary')?.disabled})"
+        )
+        assert review_preview["allocations"] >= 1
+        assert review_preview["approveEnabled"] is False
+        note_entered = devtools.evaluate(
+            "(() => { const input = document.querySelector('.review-form-grid textarea'); "
+            "if (!input) return false; const setter = Object.getOwnPropertyDescriptor("
+            "HTMLTextAreaElement.prototype, 'value').set; setter.call(input, 'Đã kiểm tra chứng từ nguồn'); "
+            "input.dispatchEvent(new Event('input', {bubbles:true})); return true; })()"
+        )
+        assert note_entered is True
+        wait_until(devtools, "!document.querySelector('.review-decision .primary')?.disabled")
+        devtools.evaluate("document.querySelector('.review-decision').scrollIntoView({block:'center'})")
+        time.sleep(0.3)
+        capture(devtools, stage_path("review-decision"))
+        devtools.evaluate("document.querySelector('.review-decision .primary').click()")
+        wait_until(
+            devtools,
+            "document.querySelectorAll('.review-history tbody tr').length >= 1 && "
+            "Boolean(document.querySelector('.inline-success'))",
+        )
+        devtools.evaluate("document.querySelector('.review-history').scrollIntoView({block:'center'})")
+        time.sleep(0.3)
+        capture(devtools, stage_path("review-approved"))
+        review_approved = devtools.evaluate(
+            "({revision: document.querySelector('.review-tools .loaded-count')?.textContent, "
+            "conservation: document.body.innerText.includes('Bảo toàn tiền')})"
+        )
+        assert "Revision 1" in review_approved["revision"]
+        assert review_approved["conservation"] is True
+        undo_clicked = devtools.evaluate(
+            "(() => { const button = document.querySelector('.review-history tbody tr .text-button'); "
+            "if (!button || button.disabled) return false; button.click(); return true; })()"
+        )
+        assert undo_clicked is True
+        wait_until(
+            devtools,
+            "document.querySelectorAll('.review-history tbody tr').length >= 2 && "
+            "document.querySelector('.review-tools .loaded-count')?.textContent.includes('Revision 2')",
+        )
+        devtools.evaluate("document.querySelector('.review-history').scrollIntoView({block:'center'})")
+        time.sleep(0.3)
+        capture(devtools, stage_path("review-undone"))
+
         click_button(devtools, "Tạo phiên mới")
         wait_until(devtools, "document.body.innerText.includes('Đối soát giao dịch tài chính')")
         encoded_run_id = json.dumps(run_id)
@@ -362,6 +416,7 @@ def main() -> None:
                 "charts_detail": chart_evidence,
                 "layer_tooltip": layer_tooltip,
                 "payment_tooltip": payment_tooltip,
+                "review_approve_undo_verified": True,
                 "screenshots": screenshots,
             }
         )

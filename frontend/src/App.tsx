@@ -205,7 +205,7 @@ export function App() {
               <div><p className="eyebrow">MÃ PHIÊN {runId.slice(0, 8)} · LẦN CẬP NHẬT {loadedAt ? new Intl.DateTimeFormat("vi-VN", { dateStyle: "short", timeStyle: "short" }).format(new Date(loadedAt)) : "—"}</p><h1 id="dashboard-title">Kết quả đối soát</h1><p>Tổng quan, phân tích và bằng chứng truy vết của phiên hiện tại.</p></div>
               <button className="secondary" type="button" onClick={reset}>Tạo phiên mới</button>
             </div>
-            <Dashboard data={dashboard} groups={groups} exceptions={exceptions} orders={orders} bankTransactions={bankTransactions} totals={explorerTotals} loadingMore={loadingMore} onLoadMore={loadMore} runId={runId} />
+            <Dashboard data={dashboard} groups={groups} exceptions={exceptions} orders={orders} bankTransactions={bankTransactions} totals={explorerTotals} loadingMore={loadingMore} onLoadMore={loadMore} onRevisionChanged={() => loadRun(runId)} runId={runId} />
           </section>
         )}
       </main>

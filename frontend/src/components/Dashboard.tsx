@@ -14,6 +14,7 @@ import type {
 } from "../types";
 import { asSafeMinorUnit, formatMoney } from "../utils/money";
 import { buildLayerChartModel, buildPaymentStatusChartModel } from "./dashboardCharts";
+import { ReconciliationReview } from "./ReconciliationReview";
 import { TransactionDetailDrawer } from "./TransactionDetailDrawer";
 
 const Plot = createPlotlyComponent(Plotly);
@@ -83,6 +84,7 @@ export function Dashboard({
   totals,
   loadingMore,
   onLoadMore,
+  onRevisionChanged,
   runId,
 }: {
   data: DashboardData;
@@ -93,6 +95,7 @@ export function Dashboard({
   totals: ExplorerTotals;
   loadingMore: boolean;
   onLoadMore: (kind: ExplorerTab) => void | Promise<void>;
+  onRevisionChanged: () => void | Promise<void>;
   runId: string;
 }) {
   const [tab, setTab] = useState<ExplorerTab>("orders");
@@ -249,8 +252,16 @@ export function Dashboard({
         </div>
       </section>
 
+      <ReconciliationReview
+        runId={runId}
+        currency={currency}
+        effectiveRevision={data.effective_revision}
+        onOpenGroup={(groupId) => openDetail("groups", groupId)}
+        onRevisionChanged={onRevisionChanged}
+      />
+
       <section className="dashboard-section" aria-labelledby="explorer-title">
-        <div className="section-label"><span>C</span><div><h2 id="explorer-title">Tra cứu chi tiết</h2><p>Tìm kiếm trong phần dữ liệu đã tải. Chọn mã hoặc dòng để xem nguồn, bằng chứng và phân bổ tiền.</p></div></div>
+        <div className="section-label"><span>D</span><div><h2 id="explorer-title">Tra cứu chi tiết</h2><p>Tìm kiếm trong phần dữ liệu đã tải. Chọn mã hoặc dòng để xem nguồn, bằng chứng và phân bổ tiền.</p></div></div>
         <article className="surface explorer-card">
           <div className="explorer-tabs" role="tablist" aria-label="Loại dữ liệu tra cứu">
             {tabs.map((item) => <button key={item.id} type="button" role="tab" aria-selected={tab === item.id} className={tab === item.id ? "active" : ""} onClick={() => selectTab(item.id)}>{item.label}<span>{totals[item.id]}</span></button>)}
@@ -273,7 +284,7 @@ export function Dashboard({
       </section>
 
       <section className="dashboard-section" aria-labelledby="export-title">
-        <div className="section-label"><span>D</span><div><h2 id="export-title">Xuất báo cáo và truy vết</h2><p>Tải báo cáo Excel gồm tổng quan, dữ liệu nguồn chuẩn hóa, phân bổ, đề xuất và thông tin truy vết.</p></div></div>
+        <div className="section-label"><span>E</span><div><h2 id="export-title">Xuất báo cáo và truy vết</h2><p>Tải báo cáo Excel gồm tổng quan, dữ liệu nguồn chuẩn hóa, phân bổ, đề xuất và thông tin truy vết.</p></div></div>
         <article className={`surface export-panel ${data.conservation.is_valid ? "valid" : "invalid"}`}>
           <div className="export-status"><span aria-hidden="true">{data.conservation.is_valid ? "✓" : "!"}</span><div><strong>{data.conservation.is_valid ? "Bảo toàn tiền đã được xác minh" : "Phát hiện vi phạm bảo toàn tiền"}</strong><p>{data.conservation.is_valid ? "Không có phân bổ trùng hoặc phần chênh lệch bị mất." : data.conservation.violations.join(", ")}</p></div></div>
           <dl><div><dt>Mã phiên</dt><dd>{runId}</dd></div><div><dt>Lần sửa</dt><dd>{data.effective_revision}</dd></div><div><dt>Định dạng</dt><dd>Excel (.xlsx)</dd></div></dl>

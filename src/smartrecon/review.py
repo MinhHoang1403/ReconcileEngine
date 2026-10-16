@@ -121,11 +121,31 @@ def reject_group(result: ReconciliationResult, group_id: str) -> ReconciliationR
     return _rebuild(result, groups, result.allocations, candidates)
 
 
+def mark_group_undone(result: ReconciliationResult, group_id: str | None) -> ReconciliationResult:
+    """Mark a restored proposal as undone while keeping it available for a later decision."""
+    if group_id is None:
+        return result
+    target = next((group for group in result.groups if group.group_id == group_id), None)
+    if target is None or target.link_status is not LinkStatus.PROPOSED:
+        raise ReviewDecisionError(
+            "UNDO_SNAPSHOT_INVALID",
+            "Snapshot trước quyết định không còn proposal cần hoàn tác.",
+        )
+    groups = tuple(
+        replace(group, review_status=ReviewStatus.UNDONE) if group.group_id == group_id else group
+        for group in result.groups
+    )
+    return replace(result, groups=groups)
+
+
 def _reviewable_group(result: ReconciliationResult, group_id: str) -> MatchGroup:
     target = next((group for group in result.groups if group.group_id == group_id), None)
     if target is None:
         raise ReviewDecisionError("REVIEW_GROUP_NOT_FOUND", "Không tìm thấy đề xuất cần xác minh.")
-    if target.link_status is not LinkStatus.PROPOSED or target.review_status is not ReviewStatus.OPEN:
+    if target.link_status is not LinkStatus.PROPOSED or target.review_status not in {
+        ReviewStatus.OPEN,
+        ReviewStatus.UNDONE,
+    }:
         raise ReviewDecisionError("REVIEW_GROUP_NOT_OPEN", "Đề xuất không còn ở trạng thái chờ xác minh.")
     return target
 

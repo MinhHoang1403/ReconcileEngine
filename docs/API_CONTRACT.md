@@ -33,11 +33,13 @@ API HTTP không gắn nhãn phiên bản trong path. OpenAPI tương tác có t�
 | GET | `/api/runs/{run_id}/exceptions` | Exception cases, phân trang |
 | GET | `/api/runs/{run_id}/exceptions/{exception_id}` | Chi tiết các bản ghi và bằng chứng liên quan đến một exception |
 | GET | `/api/runs/{run_id}/exports?format=xlsx` | Workbook chín sheet của effective revision |
+| GET | `/api/runs/{run_id}/reviews` | Review queue theo effective revision; tìm kiếm, lọc loại quan hệ và phân trang |
+| GET | `/api/runs/{run_id}/reviews/history` | Audit approve/reject/undo đã commit, phân trang |
 | POST | `/api/runs/{run_id}/reviews/approve` | Chấp thuận proposal hợp lệ và tạo effective revision mới |
 | POST | `/api/runs/{run_id}/reviews/reject` | Từ chối proposal, không tạo allocation, và tạo revision mới |
 | POST | `/api/runs/{run_id}/reviews/undo` | Hoàn tác action gần nhất khi chưa có revision phụ thuộc |
 
-Ba endpoint review nhận `expected_revision` và `idempotency_key` trong JSON body. Approve/reject nhận `group_id`; undo nhận `action_id`. `actor_label` chỉ là nhãn audit do người dùng nhập trong demo local, không phải danh tính đã xác thực. Một retry có cùng key và cùng payload trả lại cùng `action_id` với `idempotent_replay=true`; cùng key nhưng payload khác bị từ chối.
+Ba endpoint review nhận `expected_revision` và `idempotency_key` trong JSON body. Approve/reject nhận `group_id` và bắt buộc có `note` nêu bằng chứng hoặc lý do quyết định; undo nhận `action_id` và note tùy chọn. `actor_label` chỉ là nhãn audit do người dùng nhập trong demo local, không phải danh tính đã xác thực. Một retry có cùng key và cùng payload trả lại cùng `action_id` với `idempotent_replay=true`; cùng key nhưng payload khác bị từ chối.
 
 Các endpoint danh sách nhận `page >= 1`, `1 <= page_size <= 200`; response là `{items, page, page_size, total}`. Frontend tải 50 bản ghi mỗi lần và luôn tách “đã tải” khỏi tổng số trên server. Dữ liệu lớn không được trả toàn bộ trong một JSON.
 

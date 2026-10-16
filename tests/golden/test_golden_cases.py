@@ -17,6 +17,7 @@ from smartrecon.domain.statuses import (
 )
 from smartrecon.engine import ReconciliationResult, run_reconciliation
 from smartrecon.ingest.normalization import NormalizedBundle
+from smartrecon.review import ReviewDecisionError, approve_group, reject_group
 
 BASE_DATE = date(2026, 1, 1)
 
@@ -273,6 +274,8 @@ GOLDEN_FIXTURES = (
     ),
 )
 
+REVIEW_GOLDEN_FIXTURE_IDS = {"F19", "F20"}
+
 
 def run_fixture(fixture: GoldenFixture) -> ReconciliationResult:
     normalized = NormalizedBundle(
@@ -307,7 +310,7 @@ def test_golden_oracle(fixture: GoldenFixture) -> None:
         )
 
 
-def test_fixture_catalog_is_exactly_the_22_in_scope_cases() -> None:
+def test_fixture_catalog_covers_all_24_business_cases() -> None:
     assert {fixture.fixture_id for fixture in GOLDEN_FIXTURES} == {
         *(f"F{number:02d}" for number in range(1, 19)),
         "F21",
@@ -315,6 +318,37 @@ def test_fixture_catalog_is_exactly_the_22_in_scope_cases() -> None:
         "F23",
         "F24",
     }
+    assert {fixture.fixture_id for fixture in GOLDEN_FIXTURES} | REVIEW_GOLDEN_FIXTURE_IDS == {
+        *(f"F{number:02d}" for number in range(1, 25)),
+    }
+
+
+def test_competing_approval_fixture_cannot_reuse_one_bank_credit() -> None:
+    result = run_fixture(next(item for item in GOLDEN_FIXTURES if item.fixture_id == "F05"))
+    proposals = [group for group in result.groups if group.link_status is LinkStatus.PROPOSED]
+    first = approve_group(result, proposals[0].group_id)
+
+    with pytest.raises(ReviewDecisionError) as error:
+        approve_group(first, proposals[1].group_id)
+
+    assert error.value.code == "ALLOCATION_CONFLICT"
+    assert first.conservation.is_valid
+    assert sum(edge.allocated_cash_minor for edge in first.allocations if edge.bank_txn_id == "B05") == 100_000
+
+
+def test_undo_dependency_fixture_has_a_downstream_decision_to_preserve() -> None:
+    result = run_fixture(next(item for item in GOLDEN_FIXTURES if item.fixture_id == "F05"))
+    proposals = [group for group in result.groups if group.link_status is LinkStatus.PROPOSED]
+    approved = approve_group(result, proposals[0].group_id)
+    downstream = reject_group(approved, proposals[1].group_id)
+    rejected = next(group for group in downstream.groups if group.group_id == proposals[1].group_id)
+    original = next(group for group in result.groups if group.group_id == proposals[1].group_id)
+
+    assert rejected.link_status is LinkStatus.REJECTED
+    assert original.link_status is LinkStatus.PROPOSED
+    assert downstream.conservation.is_valid
+    # Restoring the snapshot before approval would erase the later rejection, so API undo must return 409.
+    assert downstream != result
 
 
 def test_ambiguous_proposals_never_enter_confirmed_cash_kpis() -> None:

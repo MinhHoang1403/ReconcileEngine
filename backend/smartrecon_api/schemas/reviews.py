@@ -16,6 +16,7 @@ class ReviewCommandBase(BaseModel):
 
 class ApproveReviewRequest(ReviewCommandBase):
     group_id: str = Field(min_length=1, max_length=64)
+    note: str = Field(min_length=1, max_length=2_000)
 
 
 class RejectReviewRequest(ReviewCommandBase):
@@ -39,3 +40,12 @@ class ReviewActionResponse(BaseModel):
     kpis: dict[str, Any]
     conservation: dict[str, Any]
     idempotent_replay: bool = False
+
+
+class ReviewPageResponse(BaseModel):
+    run_id: str
+    effective_revision: int
+    items: list[dict[str, Any]]
+    page: int
+    page_size: int
+    total: int

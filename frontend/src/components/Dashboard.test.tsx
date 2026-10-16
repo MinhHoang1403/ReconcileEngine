@@ -3,6 +3,7 @@ import { expect, test, vi } from "vitest";
 
 vi.mock("plotly.js/dist/plotly-basic.js", () => ({ default: {} }));
 vi.mock("react-plotly.js/factory", () => ({ default: () => () => <div className="js-plotly-plot" /> }));
+vi.mock("./ReconciliationReview", () => ({ ReconciliationReview: () => <div>Giao dịch cần xác minh</div> }));
 
 import { Dashboard } from "./Dashboard";
 
@@ -33,6 +34,7 @@ test("dashboard sắp xếp đúng luồng, tra cứu trang hiện tại và xu�
     totals={{ orders: 2, bank: 1, groups: 1, exceptions: 1 }}
     loadingMore={false}
     onLoadMore={vi.fn()}
+    onRevisionChanged={vi.fn()}
   />);
 
   expect(screen.getByRole("heading", { name: "Tổng quan kiểm soát" })).toBeInTheDocument();

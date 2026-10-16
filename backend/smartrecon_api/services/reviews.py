@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any, Literal
 from uuid import uuid4
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from backend.smartrecon_api.db.models import (
@@ -29,7 +29,7 @@ from backend.smartrecon_api.services.runs import (
 )
 from backend.smartrecon_api.services.serialization import hash_json, to_jsonable
 from smartrecon.engine import ReconciliationResult
-from smartrecon.review import ReviewDecisionError, approve_group, reject_group
+from smartrecon.review import ReviewDecisionError, approve_group, mark_group_undone, reject_group
 
 ReviewActionType = Literal["APPROVE_GROUP", "REJECT_GROUP", "UNDO_ACTION"]
 
@@ -49,6 +49,147 @@ class ReviewServiceError(RuntimeError):
         self.message = message
         self.status_code = status_code
         self.context = context
+
+
+def review_queue(
+    db: Session,
+    run_id: str,
+    page: int,
+    page_size: int,
+    query: str | None = None,
+    group_type: str | None = None,
+) -> dict[str, Any]:
+    """Return reviewable proposals with source amounts and an allocation preview."""
+    run = db.get(ReconciliationRun, run_id)
+    if run is None:
+        raise ReviewServiceError("RUN_NOT_FOUND", "Không tìm thấy run.", 404)
+    result = result_from_payload(load_run_result(run_id, run.current_revision))
+    candidates = {item.candidate_id: item for item in result.candidates}
+    order_by_id = {item.order_id: item for item in result.orders}
+    bank_by_id = {item.bank_txn_id: item for item in result.bank_transactions}
+    rows: list[dict[str, Any]] = []
+    for group in result.groups:
+        if group.link_status.value != "PROPOSED" or group.review_status.value not in {
+            "OPEN",
+            "UNDONE",
+        }:
+            continue
+        if group_type and group.group_type.value != group_type:
+            continue
+        searchable = " ".join(
+            (
+                group.group_id,
+                group.group_type.value,
+                *group.order_ids,
+                *group.bank_txn_ids,
+                group.evidence.rule_id,
+                group.evidence.explanation_vi,
+            )
+        ).casefold()
+        if query and query.casefold() not in searchable:
+            continue
+        preview_edges: list[dict[str, Any]] = []
+        conflict_code: str | None = None
+        conflict_message: str | None = None
+        try:
+            preview = approve_group(result, group.group_id)
+            original_edge_ids = {edge.edge_id for edge in result.allocations}
+            preview_edges = [to_jsonable(edge) for edge in preview.allocations if edge.edge_id not in original_edge_ids]
+        except ReviewDecisionError as exc:
+            conflict_code = exc.code
+            conflict_message = str(exc)
+        candidate = candidates.get(group.group_id)
+        rows.append(
+            {
+                **to_jsonable(group),
+                "order_records": [
+                    {
+                        "order_id": order_by_id[order_id].order_id,
+                        "ordered_at": order_by_id[order_id].ordered_at,
+                        "expected_amount_minor": order_by_id[order_id].expected_amount_minor,
+                        "external_ref": order_by_id[order_id].external_ref,
+                    }
+                    for order_id in group.order_ids
+                    if order_id in order_by_id
+                ],
+                "bank_records": [
+                    {
+                        "bank_txn_id": bank_by_id[bank_id].bank_txn_id,
+                        "txn_date": bank_by_id[bank_id].txn_date,
+                        "posted_amount_minor": bank_by_id[bank_id].posted_amount_minor,
+                        "direction": bank_by_id[bank_id].direction,
+                        "amount_basis": bank_by_id[bank_id].amount_basis,
+                        "txn_ref": bank_by_id[bank_id].txn_ref,
+                    }
+                    for bank_id in group.bank_txn_ids
+                    if bank_id in bank_by_id
+                ],
+                "proposed_allocations": preview_edges,
+                "proposed_cash_minor": sum(edge["allocated_cash_minor"] for edge in preview_edges),
+                "competing_candidate_ids": list(candidate.competing_candidate_ids) if candidate else [],
+                "can_approve": conflict_code is None,
+                "conflict_code": conflict_code,
+                "conflict_message": conflict_message,
+            }
+        )
+    rows.sort(key=lambda item: item["group_id"])
+    start = (page - 1) * page_size
+    return {
+        "run_id": run_id,
+        "effective_revision": run.current_revision,
+        "items": rows[start : start + page_size],
+        "page": page,
+        "page_size": page_size,
+        "total": len(rows),
+    }
+
+
+def review_history(
+    db: Session,
+    run_id: str,
+    page: int,
+    page_size: int,
+) -> dict[str, Any]:
+    """Return committed actions without treating actor labels as authenticated identities."""
+    run = db.get(ReconciliationRun, run_id)
+    if run is None:
+        raise ReviewServiceError("RUN_NOT_FOUND", "Không tìm thấy run.", 404)
+    total = db.scalar(select(func.count()).select_from(ReviewAction).where(ReviewAction.run_id == run_id))
+    actions = db.scalars(
+        select(ReviewAction)
+        .where(ReviewAction.run_id == run_id)
+        .order_by(ReviewAction.created_at.desc(), ReviewAction.id.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+    ).all()
+    items = [
+        {
+            "action_id": action.id,
+            "action_type": action.action_type,
+            "revision_before": action.revision_before,
+            "revision_after": action.revision_after,
+            "target_group_id": action.target_group_id,
+            "actor_label": action.actor_label,
+            "actor_is_authenticated": False,
+            "note": action.note,
+            "undo_of_action_id": action.undo_of_action_id,
+            "allocation_delta_minor": action.payload.get("response", {}).get(
+                "allocation_delta_minor",
+                0,
+            ),
+            "evidence": action.payload.get("evidence", {}),
+            "created_at": action.created_at,
+        }
+        for action in actions
+    ]
+    return {
+        "run_id": run_id,
+        "effective_revision": run.current_revision,
+        "items": items,
+        "page": page,
+        "page_size": page_size,
+        "total": int(total or 0),
+    }
 
 
 def approve_review(
@@ -166,7 +307,10 @@ def _execute_review(
                     current_revision=run.current_revision,
                     target_revision=target_action.revision_after,
                 )
-            after = result_from_payload(load_run_result(run_id, target_action.revision_before))
+            after = mark_group_undone(
+                result_from_payload(load_run_result(run_id, target_action.revision_before)),
+                target_action.target_group_id,
+            )
             target_group_id = target_action.target_group_id
 
         new_revision = run.current_revision + 1

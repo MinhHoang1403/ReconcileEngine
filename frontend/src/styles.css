@@ -258,6 +258,34 @@ tbody tr:hover td { background: #fafcfb; }
 .chart-note { background: #f3f6f4; color: var(--muted); }
 .chart-warning { background: var(--warning-soft); color: var(--warning); font-weight: 700; }
 .proposal-note { color: var(--warning); font-size: .72rem; font-weight: 700; }
+.review-workspace { min-width: 0; overflow: hidden; }
+.review-tools { display: grid; grid-template-columns: minmax(230px, 1fr) minmax(190px, auto) auto 1fr; gap: 10px; align-items: center; padding: 16px; }
+.review-table { max-height: 390px; border-width: 1px 0; border-radius: 0; }
+.review-pagination { display: flex; align-items: center; justify-content: center; gap: 12px; padding: 12px 16px; }
+.review-pagination span { color: var(--muted); font-size: .74rem; }
+.review-decision, .review-history { display: grid; gap: 14px; border-top: 1px solid var(--line); padding: 18px; }
+.review-decision { background: #fbfdfc; }
+.review-decision-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; }
+.review-decision-heading h3, .review-decision-heading p { margin-bottom: 0; }
+.review-decision-heading p { margin-top: 4px; font-size: .76rem; }
+.review-decision-heading > span { color: var(--muted); font-size: .74rem; }
+.review-counterparts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.review-counterparts > div { border: 1px solid var(--line); border-radius: 11px; background: #fff; padding: 13px; }
+.review-counterparts h4, .allocation-preview h4 { margin: 0 0 9px; font-size: .8rem; }
+.review-counterparts dl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; margin: 0; }
+.review-counterparts dl + dl { margin-top: 11px; border-top: 1px solid var(--line); padding-top: 11px; }
+.review-counterparts dt { color: var(--muted); font-size: .65rem; }
+.review-counterparts dd { margin: 2px 0 0; overflow-wrap: anywhere; font-size: .74rem; }
+.allocation-preview { border: 1px solid #bad7c9; border-radius: 11px; background: #f0f8f4; padding: 13px; }
+.allocation-preview p { margin: 3px 0; font-size: .75rem; }
+.review-warning { color: var(--warning); font-weight: 700; }
+.review-form-grid { display: grid; grid-template-columns: minmax(220px, .7fr) minmax(300px, 1.3fr); gap: 12px; }
+.review-form-grid label { display: grid; gap: 6px; color: #3c4e45; font-size: .72rem; font-weight: 700; }
+.review-form-grid textarea { min-height: 82px; }
+.secondary.danger { border-color: #d9aaa6; color: var(--danger); }
+.secondary.danger:hover:not(:disabled) { border-color: var(--danger); background: var(--danger-soft); }
+.inline-success { margin: 0 16px 12px; border-radius: 8px; background: var(--brand-soft); padding: 9px 11px; color: var(--brand); font-size: .76rem; }
+.status-blocked { background: var(--danger-soft); color: var(--danger); }
 .explorer-card { min-width: 0; overflow: hidden; }
 .explorer-tabs { display: flex; overflow-x: auto; border-bottom: 1px solid var(--line); padding: 0 16px; }
 .explorer-tabs button { display: flex; align-items: center; gap: 7px; min-height: 50px; border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: transparent; padding: 9px 14px; color: var(--muted); white-space: nowrap; }
@@ -302,6 +330,9 @@ tbody tr:hover td { background: #fafcfb; }
 
 @media (max-width: 960px) {
   .source-layout, .preview-grid, .mapping-columns { grid-template-columns: 1fr; }
+  .review-tools { grid-template-columns: 1fr 1fr; }
+  .review-tools .loaded-count { justify-self: start; }
+  .review-form-grid { grid-template-columns: 1fr; }
   .source-aside { grid-template-columns: 1fr 1fr; }
   .health-summary { grid-template-columns: repeat(3, 1fr); }
   .health-summary > div { border-bottom: 1px solid var(--line); }
@@ -329,6 +360,8 @@ tbody tr:hover td { background: #fafcfb; }
   .kpi-grid { grid-template-columns: repeat(2, 1fr); }
   .kpi-bridge small { width: 100%; margin-left: 0; }
   .explorer-tools { grid-template-columns: 1fr; }
+  .review-tools, .review-counterparts { grid-template-columns: 1fr; }
+  .review-decision-heading { display: grid; }
   .loaded-count { justify-self: start; }
   .export-panel { grid-template-columns: 1fr; }
   .export-panel dl { grid-column: auto; grid-row: auto; }

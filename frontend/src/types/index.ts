@@ -103,6 +103,7 @@ export type GroupRow = {
   order_ids: string[];
   bank_txn_ids: string[];
   link_status: string;
+  review_status?: string;
   payment_statuses: Record<string, string>;
   evidence: { rule_id: string; explanation_vi: string; reason_codes: string[] };
 };
@@ -197,3 +198,61 @@ export type GroupDetail = GroupRow & {
 };
 
 export type ExplorerTotals = Record<"orders" | "bank" | "groups" | "exceptions", number>;
+
+export type ReviewQueueItem = GroupRow & {
+  review_status: string;
+  order_records: {
+    order_id: string;
+    ordered_at: string;
+    expected_amount_minor: number;
+    external_ref: string | null;
+  }[];
+  bank_records: {
+    bank_txn_id: string;
+    txn_date: string;
+    posted_amount_minor: number;
+    direction: string;
+    amount_basis: string;
+    txn_ref: string | null;
+  }[];
+  proposed_allocations: AllocationRow[];
+  proposed_cash_minor: number;
+  competing_candidate_ids: string[];
+  can_approve: boolean;
+  conflict_code: string | null;
+  conflict_message: string | null;
+};
+
+export type ReviewHistoryItem = {
+  action_id: string;
+  action_type: "APPROVE_GROUP" | "REJECT_GROUP" | "UNDO_ACTION";
+  revision_before: number;
+  revision_after: number;
+  target_group_id: string | null;
+  actor_label: string | null;
+  actor_is_authenticated: false;
+  note: string | null;
+  undo_of_action_id: string | null;
+  allocation_delta_minor: number;
+  evidence: Record<string, unknown>;
+  created_at: string;
+};
+
+export type ReviewPage<T> = Paged<T> & {
+  run_id: string;
+  effective_revision: number;
+};
+
+export type ReviewActionResult = {
+  run_id: string;
+  action_id: string;
+  action_type: string;
+  revision_before: number;
+  effective_revision: number;
+  effective_checksum: string;
+  changed_group_ids: string[];
+  allocation_delta_minor: number;
+  kpis: Record<string, unknown>;
+  conservation: { is_valid: boolean; violations: string[] };
+  idempotent_replay: boolean;
+};
