@@ -16,6 +16,11 @@ from backend.smartrecon_api.schemas.runs import (
     RunDetailResponse,
     RunRequest,
 )
+from backend.smartrecon_api.services.analytics import (
+    dashboard_analytics,
+    review_actions_as_of,
+    review_audit_rows,
+)
 from backend.smartrecon_api.services.artifacts import relative_artifact_path, sha256_path
 from backend.smartrecon_api.services.details import entity_detail, extend_group_detail
 from backend.smartrecon_api.services.exports import create_excel_export
@@ -42,6 +47,15 @@ def _result_or_404(run_id: str, revision: int) -> dict[str, Any]:
             status_code=404,
             detail={"error_code": "RESULT_NOT_FOUND", "message": "Run thiếu result artifact."},
         ) from exc
+
+
+def _effective_revision(run: ReconciliationRun, requested_revision: int | None) -> int:
+    """Resolve a read to one immutable snapshot, including an explicitly older revision."""
+    return run.current_revision if requested_revision is None else requested_revision
+
+
+def _page(run_id: str, revision: int, items: list[Any], page: int, page_size: int) -> dict[str, Any]:
+    return {"run_id": run_id, "effective_revision": revision, **paginate(items, page, page_size)}
 
 
 @router.post("", response_model=RunCreatedResponse)
@@ -88,15 +102,22 @@ def get_run(run_id: str, db: Session = Depends(get_db)) -> dict:
 
 
 @router.get("/{run_id}/dashboard", response_model=DashboardResponse)
-def get_dashboard(run_id: str, db: Session = Depends(get_db)) -> dict:
+def get_dashboard(
+    run_id: str,
+    revision: int | None = Query(default=None, ge=0),
+    db: Session = Depends(get_db),
+) -> dict:
     run = _run_or_404(db, run_id)
-    result = _result_or_404(run_id, run.current_revision)
+    effective_revision = _effective_revision(run, revision)
+    result = _result_or_404(run_id, effective_revision)
+    actions = review_actions_as_of(db, run_id, effective_revision)
     return {
         "run_id": run.id,
-        "effective_revision": run.current_revision,
+        "effective_revision": effective_revision,
         "kpis": result["kpis"],
         "layer_counts": result["layer_counts"],
         "payment_status_counts": result["kpis"]["payment_status_counts"],
+        "analytics": dashboard_analytics(result, actions),
         "conservation": result["conservation"],
     }
 
@@ -107,19 +128,26 @@ def get_groups(
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
     link_status: str | None = None,
+    revision: int | None = Query(default=None, ge=0),
     db: Session = Depends(get_db),
 ) -> dict:
     run = _run_or_404(db, run_id)
-    groups = _result_or_404(run_id, run.current_revision)["groups"]
+    effective_revision = _effective_revision(run, revision)
+    groups = _result_or_404(run_id, effective_revision)["groups"]
     if link_status:
         groups = [item for item in groups if item["link_status"] == link_status]
-    return paginate(groups, page, page_size)
+    return _page(run_id, effective_revision, groups, page, page_size)
 
 
 @router.get("/{run_id}/groups/{group_id}")
-def get_group(run_id: str, group_id: str, db: Session = Depends(get_db)) -> dict:
+def get_group(
+    run_id: str,
+    group_id: str,
+    revision: int | None = Query(default=None, ge=0),
+    db: Session = Depends(get_db),
+) -> dict:
     run = _run_or_404(db, run_id)
-    result = _result_or_404(run_id, run.current_revision)
+    result = _result_or_404(run_id, _effective_revision(run, revision))
     session = db.get(UploadSession, run.upload_session_id)
     group = extend_group_detail(result, session, group_id) if session else None
     if group is None:
@@ -127,12 +155,18 @@ def get_group(run_id: str, group_id: str, db: Session = Depends(get_db)) -> dict
     return group
 
 
-def _entity_detail_or_404(db: Session, run_id: str, entity_type: str, entity_id: str) -> dict[str, Any]:
+def _entity_detail_or_404(
+    db: Session,
+    run_id: str,
+    entity_type: str,
+    entity_id: str,
+    revision: int | None,
+) -> dict[str, Any]:
     run = _run_or_404(db, run_id)
     session = db.get(UploadSession, run.upload_session_id)
     detail = (
         entity_detail(
-            _result_or_404(run_id, run.current_revision),
+            _result_or_404(run_id, _effective_revision(run, revision)),
             session,
             entity_type,
             entity_id,
@@ -149,18 +183,33 @@ def _entity_detail_or_404(db: Session, run_id: str, entity_type: str, entity_id:
 
 
 @router.get("/{run_id}/orders/{order_id}")
-def get_order_detail(run_id: str, order_id: str, db: Session = Depends(get_db)) -> dict:
-    return _entity_detail_or_404(db, run_id, "order", order_id)
+def get_order_detail(
+    run_id: str,
+    order_id: str,
+    revision: int | None = Query(default=None, ge=0),
+    db: Session = Depends(get_db),
+) -> dict:
+    return _entity_detail_or_404(db, run_id, "order", order_id, revision)
 
 
 @router.get("/{run_id}/bank-transactions/{bank_txn_id}")
-def get_bank_detail(run_id: str, bank_txn_id: str, db: Session = Depends(get_db)) -> dict:
-    return _entity_detail_or_404(db, run_id, "bank", bank_txn_id)
+def get_bank_detail(
+    run_id: str,
+    bank_txn_id: str,
+    revision: int | None = Query(default=None, ge=0),
+    db: Session = Depends(get_db),
+) -> dict:
+    return _entity_detail_or_404(db, run_id, "bank", bank_txn_id, revision)
 
 
 @router.get("/{run_id}/exceptions/{exception_id}")
-def get_exception_detail(run_id: str, exception_id: str, db: Session = Depends(get_db)) -> dict:
-    return _entity_detail_or_404(db, run_id, "exception", exception_id)
+def get_exception_detail(
+    run_id: str,
+    exception_id: str,
+    revision: int | None = Query(default=None, ge=0),
+    db: Session = Depends(get_db),
+) -> dict:
+    return _entity_detail_or_404(db, run_id, "exception", exception_id, revision)
 
 
 @router.get("/{run_id}/orders", response_model=PageResponse)
@@ -168,10 +217,12 @@ def get_orders(
     run_id: str,
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
+    revision: int | None = Query(default=None, ge=0),
     db: Session = Depends(get_db),
 ) -> dict:
     run = _run_or_404(db, run_id)
-    result = _result_or_404(run_id, run.current_revision)
+    effective_revision = _effective_revision(run, revision)
+    result = _result_or_404(run_id, effective_revision)
     allocated: dict[str, int] = {}
     for edge in result["allocations"]:
         allocated[edge["order_id"]] = allocated.get(edge["order_id"], 0) + edge["allocated_cash_minor"]
@@ -184,7 +235,7 @@ def get_orders(
         }
         for item in result["orders"]
     ]
-    return paginate(rows, page, page_size)
+    return _page(run_id, effective_revision, rows, page, page_size)
 
 
 @router.get("/{run_id}/bank-transactions", response_model=PageResponse)
@@ -192,10 +243,12 @@ def get_bank_transactions(
     run_id: str,
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
+    revision: int | None = Query(default=None, ge=0),
     db: Session = Depends(get_db),
 ) -> dict:
     run = _run_or_404(db, run_id)
-    result = _result_or_404(run_id, run.current_revision)
+    effective_revision = _effective_revision(run, revision)
+    result = _result_or_404(run_id, effective_revision)
     allocated: dict[str, int] = {}
     for edge in result["allocations"]:
         allocated[edge["bank_txn_id"]] = allocated.get(edge["bank_txn_id"], 0) + edge["allocated_cash_minor"]
@@ -207,7 +260,7 @@ def get_bank_transactions(
         }
         for item in result["bank_transactions"]
     ]
-    return paginate(rows, page, page_size)
+    return _page(run_id, effective_revision, rows, page, page_size)
 
 
 @router.get("/{run_id}/exceptions", response_model=PageResponse)
@@ -215,11 +268,15 @@ def get_exceptions(
     run_id: str,
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
+    revision: int | None = Query(default=None, ge=0),
     db: Session = Depends(get_db),
 ) -> dict:
     run = _run_or_404(db, run_id)
-    return paginate(
-        _result_or_404(run_id, run.current_revision)["exceptions"],
+    effective_revision = _effective_revision(run, revision)
+    return _page(
+        run_id,
+        effective_revision,
+        _result_or_404(run_id, effective_revision)["exceptions"],
         page,
         page_size,
     )
@@ -229,11 +286,23 @@ def get_exceptions(
 def export_run(
     run_id: str,
     format: Literal["xlsx"] = "xlsx",
+    expected_revision: int | None = Query(default=None, ge=0),
     db: Session = Depends(get_db),
 ) -> FileResponse:
     run = _run_or_404(db, run_id)
+    if expected_revision is not None and expected_revision != run.current_revision:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "error_code": "STALE_REVISION",
+                "message": "Dashboard đã cũ; hãy tải lại trước khi xuất báo cáo.",
+                "expected_revision": expected_revision,
+                "current_revision": run.current_revision,
+            },
+        )
     result = _result_or_404(run_id, run.current_revision)
     session = db.get(UploadSession, run.upload_session_id)
+    actions = review_actions_as_of(db, run_id, run.current_revision)
     path = create_excel_export(
         run_id,
         result,
@@ -247,6 +316,7 @@ def export_run(
             "mapping_snapshot": run.mapping_snapshot,
         },
         source_manifest=session.source_manifest if session else {},
+        review_audit=review_audit_rows(actions),
     )
     existing = db.scalar(
         select(ArtifactManifest).where(

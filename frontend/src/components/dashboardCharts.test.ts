@@ -14,6 +14,13 @@ function dashboard(paymentStatusCounts: Record<string, number>, eligibleOrders: 
     kpis: { eligible_orders_count: eligibleOrders },
     layer_counts: {},
     payment_status_counts: paymentStatusCounts,
+    analytics: {
+      review_status_counts: {}, review_decision_counts: {},
+      method_summary: { confirmed_groups: 0, proposed_groups: 0, total_relation_groups: 0, confirmation_rate_percent: 0, confirmation_rate_denominator: "ALL_RELATION_GROUPS" },
+      confirmed_group_type_counts: {}, exception_reason_counts: {},
+      residual_distribution: { denominator_minor: 0, order_outstanding: [], bank_unapplied: [] },
+      confirmed_lag: { observation_unit: "ALLOCATION_PAIR", observations: 0, median_days: null, buckets: [] },
+    },
     conservation: { is_valid: true, violations: [] },
   };
 }

@@ -99,24 +99,24 @@ export const api = {
         },
       }),
     }),
-  dashboard: (runId: string) => requestJson<DashboardData>(`/api/runs/${runId}/dashboard`),
+  dashboard: (runId: string, revision?: number) => requestJson<DashboardData>(`/api/runs/${runId}/dashboard${revision === undefined ? "" : `?revision=${revision}`}`),
   run: (runId: string) => requestJson<RunDetail>(`/api/runs/${runId}`),
-  groups: (runId: string, page = 1, pageSize = 50) =>
-    requestJson<Paged<GroupRow>>(`/api/runs/${runId}/groups?page=${page}&page_size=${pageSize}`),
-  exceptions: (runId: string, page = 1, pageSize = 50) =>
-    requestJson<Paged<ExceptionRow>>(`/api/runs/${runId}/exceptions?page=${page}&page_size=${pageSize}`),
-  orders: (runId: string, page = 1, pageSize = 50) =>
-    requestJson<Paged<OrderRow>>(`/api/runs/${runId}/orders?page=${page}&page_size=${pageSize}`),
-  bankTransactions: (runId: string, page = 1, pageSize = 50) =>
-    requestJson<Paged<BankRow>>(`/api/runs/${runId}/bank-transactions?page=${page}&page_size=${pageSize}`),
-  orderDetail: (runId: string, orderId: string) =>
-    requestJson<TransactionDetail>(`/api/runs/${runId}/orders/${encodeURIComponent(orderId)}`),
-  bankTransactionDetail: (runId: string, bankTxnId: string) =>
-    requestJson<TransactionDetail>(`/api/runs/${runId}/bank-transactions/${encodeURIComponent(bankTxnId)}`),
-  exceptionDetail: (runId: string, exceptionId: string) =>
-    requestJson<TransactionDetail>(`/api/runs/${runId}/exceptions/${encodeURIComponent(exceptionId)}`),
-  groupDetail: (runId: string, groupId: string) =>
-    requestJson<GroupDetail>(`/api/runs/${runId}/groups/${encodeURIComponent(groupId)}`),
+  groups: (runId: string, page = 1, pageSize = 50, revision?: number) =>
+    requestJson<Paged<GroupRow>>(`/api/runs/${runId}/groups?page=${page}&page_size=${pageSize}${revision === undefined ? "" : `&revision=${revision}`}`),
+  exceptions: (runId: string, page = 1, pageSize = 50, revision?: number) =>
+    requestJson<Paged<ExceptionRow>>(`/api/runs/${runId}/exceptions?page=${page}&page_size=${pageSize}${revision === undefined ? "" : `&revision=${revision}`}`),
+  orders: (runId: string, page = 1, pageSize = 50, revision?: number) =>
+    requestJson<Paged<OrderRow>>(`/api/runs/${runId}/orders?page=${page}&page_size=${pageSize}${revision === undefined ? "" : `&revision=${revision}`}`),
+  bankTransactions: (runId: string, page = 1, pageSize = 50, revision?: number) =>
+    requestJson<Paged<BankRow>>(`/api/runs/${runId}/bank-transactions?page=${page}&page_size=${pageSize}${revision === undefined ? "" : `&revision=${revision}`}`),
+  orderDetail: (runId: string, orderId: string, revision?: number) =>
+    requestJson<TransactionDetail>(`/api/runs/${runId}/orders/${encodeURIComponent(orderId)}${revision === undefined ? "" : `?revision=${revision}`}`),
+  bankTransactionDetail: (runId: string, bankTxnId: string, revision?: number) =>
+    requestJson<TransactionDetail>(`/api/runs/${runId}/bank-transactions/${encodeURIComponent(bankTxnId)}${revision === undefined ? "" : `?revision=${revision}`}`),
+  exceptionDetail: (runId: string, exceptionId: string, revision?: number) =>
+    requestJson<TransactionDetail>(`/api/runs/${runId}/exceptions/${encodeURIComponent(exceptionId)}${revision === undefined ? "" : `?revision=${revision}`}`),
+  groupDetail: (runId: string, groupId: string, revision?: number) =>
+    requestJson<GroupDetail>(`/api/runs/${runId}/groups/${encodeURIComponent(groupId)}${revision === undefined ? "" : `?revision=${revision}`}`),
   reviews: (runId: string, page = 1, pageSize = 20, query = "", groupType = "") => {
     const params = new URLSearchParams({ page: String(page), page_size: String(pageSize) });
     if (query) params.set("query", query);

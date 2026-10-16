@@ -56,6 +56,7 @@ export function ReconciliationReview({
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const snapshotIsStale = queue.effective_revision !== effectiveRevision || history.effective_revision !== effectiveRevision;
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -183,6 +184,7 @@ export function ReconciliationReview({
 
         {error && <div className="inline-error" role="alert">{error}</div>}
         {message && <div className="inline-success" role="status">{message}</div>}
+        {snapshotIsStale && <div className="inline-warning" role="alert">Dashboard đang ở revision {effectiveRevision}, trong khi dữ liệu xác minh mới nhất là revision {Math.max(queue.effective_revision, history.effective_revision)}. <button className="text-button" type="button" onClick={() => void onRevisionChanged()}>Tải lại toàn bộ</button></div>}
         {loading ? <p className="empty-state">Đang tải danh sách xác minh...</p> : (
           <div className="table-wrap review-table">
             <table>
@@ -230,15 +232,15 @@ export function ReconciliationReview({
               <label><span>Ghi chú quyết định</span><textarea value={note} maxLength={2000} onChange={(event) => setNote(event.target.value)} placeholder="Bằng chứng đã kiểm tra hoặc lý do từ chối" /></label>
             </div>
             <div className="button-row">
-              <button className="secondary danger" type="button" disabled={Boolean(busy) || note.trim().length === 0} onClick={reject}>{busy === "reject" ? "Đang từ chối..." : "Từ chối đề xuất"}</button>
-              <button className="primary" type="button" disabled={Boolean(busy) || !selected.can_approve || note.trim().length === 0} onClick={approve}>{busy === "approve" ? "Đang chấp thuận..." : "Chấp thuận phân bổ"}</button>
+              <button className="secondary danger" type="button" disabled={snapshotIsStale || Boolean(busy) || note.trim().length === 0} onClick={reject}>{busy === "reject" ? "Đang từ chối..." : "Từ chối đề xuất"}</button>
+              <button className="primary" type="button" disabled={snapshotIsStale || Boolean(busy) || !selected.can_approve || note.trim().length === 0} onClick={approve}>{busy === "approve" ? "Đang chấp thuận..." : "Chấp thuận phân bổ"}</button>
             </div>
           </section>
         )}
 
         <section className="review-history" aria-labelledby="review-history-title">
           <div className="review-decision-heading"><div><h3 id="review-history-title">Lịch sử xác minh</h3><p>Nhãn người thao tác trong demo không phải danh tính đã xác thực.</p></div><span>{history.total} hành động</span></div>
-          <div className="table-wrap"><table><thead><tr><th>Thời điểm</th><th>Quyết định</th><th>Nhóm</th><th>Revision</th><th>Tiền thay đổi</th><th>Ghi chú</th><th>Thao tác</th></tr></thead><tbody>{history.items.map((item) => <tr key={item.action_id}><td>{new Intl.DateTimeFormat("vi-VN", { dateStyle: "short", timeStyle: "short" }).format(new Date(item.created_at))}</td><td>{actionLabels[item.action_type]}</td><td>{item.target_group_id || "-"}</td><td>{item.revision_before} → {item.revision_after}</td><td>{formatMoney(item.allocation_delta_minor, currency)}</td><td>{item.note || "-"}</td><td>{item.action_type !== "UNDO_ACTION" && item.revision_after === history.effective_revision ? <button className="text-button" type="button" disabled={Boolean(busy)} onClick={() => undo(item)}>{busy === item.action_id ? "Đang hoàn tác..." : "Hoàn tác"}</button> : "-"}</td></tr>)}</tbody></table></div>
+          <div className="table-wrap"><table><thead><tr><th>Thời điểm</th><th>Quyết định</th><th>Nhóm</th><th>Revision</th><th>Tiền thay đổi</th><th>Ghi chú</th><th>Thao tác</th></tr></thead><tbody>{history.items.map((item) => <tr key={item.action_id}><td>{new Intl.DateTimeFormat("vi-VN", { dateStyle: "short", timeStyle: "short" }).format(new Date(item.created_at))}</td><td>{actionLabels[item.action_type]}</td><td>{item.target_group_id || "-"}</td><td>{item.revision_before} → {item.revision_after}</td><td>{formatMoney(item.allocation_delta_minor, currency)}</td><td>{item.note || "-"}</td><td>{item.action_type !== "UNDO_ACTION" && item.revision_after === history.effective_revision ? <button className="text-button" type="button" disabled={snapshotIsStale || Boolean(busy)} onClick={() => undo(item)}>{busy === item.action_id ? "Đang hoàn tác..." : "Hoàn tác"}</button> : "-"}</td></tr>)}</tbody></table></div>
           {history.items.length === 0 && <p className="empty-state">Chưa có quyết định xác minh nào.</p>}
           <div className="review-pagination"><button className="secondary" type="button" disabled={historyPage <= 1} onClick={() => setHistoryPage((value) => value - 1)}>Trang trước</button><span>Trang {history.page}</span><button className="secondary" type="button" disabled={history.page * history.page_size >= history.total} onClick={() => setHistoryPage((value) => value + 1)}>Trang sau</button></div>
         </section>

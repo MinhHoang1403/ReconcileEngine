@@ -1,8 +1,10 @@
 from collections.abc import Generator
+from io import BytesIO
 from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
+from openpyxl import load_workbook
 
 from backend.smartrecon_api.config import get_settings
 from backend.smartrecon_api.db.database import get_db
@@ -253,6 +255,8 @@ def test_undo_creates_a_new_revision_and_restores_the_prior_snapshot(
             )
             queue_after_approval = client.get(f"/api/runs/{session.run.id}/reviews?page_size=20")
             history_after_approval = client.get(f"/api/runs/{session.run.id}/reviews/history?page_size=20")
+            dashboard_after_approval = client.get(f"/api/runs/{session.run.id}/dashboard")
+            export_after_approval = client.get(f"/api/runs/{session.run.id}/exports?format=xlsx&expected_revision=1")
             undone = client.post(
                 f"/api/runs/{session.run.id}/reviews/undo",
                 json={
@@ -263,6 +267,10 @@ def test_undo_creates_a_new_revision_and_restores_the_prior_snapshot(
                 },
             )
             queue_after_undo = client.get(f"/api/runs/{session.run.id}/reviews")
+            dashboard_after_undo = client.get(f"/api/runs/{session.run.id}/dashboard")
+            historical_dashboard = client.get(f"/api/runs/{session.run.id}/dashboard?revision=1")
+            historical_groups = client.get(f"/api/runs/{session.run.id}/groups?revision=1&page_size=200")
+            stale_export = client.get(f"/api/runs/{session.run.id}/exports?format=xlsx&expected_revision=1")
     finally:
         app.dependency_overrides.clear()
 
@@ -272,6 +280,11 @@ def test_undo_creates_a_new_revision_and_restores_the_prior_snapshot(
     assert _group_id(base_result) not in {item["group_id"] for item in queue_after_approval.json()["items"]}
     assert history_after_approval.json()["total"] == 1
     assert history_after_approval.json()["items"][0]["actor_is_authenticated"] is False
+    assert dashboard_after_approval.status_code == 200
+    assert dashboard_after_approval.json()["effective_revision"] == 1
+    assert dashboard_after_approval.json()["analytics"]["review_status_counts"]["APPROVED"] == 1
+    assert dashboard_after_approval.json()["analytics"]["review_decision_counts"]["APPROVE_GROUP"] == 1
+    assert export_after_approval.status_code == 200
     assert undone.status_code == 200
     assert undone.json()["effective_revision"] == 2
     assert undone.json()["allocation_delta_minor"] == -500_000
@@ -288,9 +301,44 @@ def test_undo_creates_a_new_revision_and_restores_the_prior_snapshot(
     )
     assert restored_item["review_status"] == "UNDONE"
     assert restored_item["can_approve"] is True
+    assert dashboard_after_undo.json()["effective_revision"] == 2
+    assert dashboard_after_undo.json()["analytics"]["review_status_counts"]["UNDONE"] == 1
+    assert dashboard_after_undo.json()["analytics"]["review_decision_counts"]["UNDO_ACTION"] == 1
+    assert historical_dashboard.json()["effective_revision"] == 1
+    assert historical_dashboard.json()["kpis"] == dashboard_after_approval.json()["kpis"]
+    assert historical_groups.json()["effective_revision"] == 1
+    historical_target = next(
+        item for item in historical_groups.json()["items"] if item["group_id"] == _group_id(base_result)
+    )
+    assert historical_target["review_status"] == "APPROVED"
+    assert stale_export.status_code == 409
+    assert stale_export.json()["detail"]["error_code"] == "STALE_REVISION"
     assert restored.allocations == base_result.allocations
     assert restored.kpis == base_result.kpis
     assert restored.conservation == base_result.conservation
+
+    workbook = load_workbook(BytesIO(export_after_approval.content), data_only=False)
+    assert len(workbook.sheetnames) == 9
+    audit = workbook["08_ReviewAudit"]
+    audit_headers = [cell.value for cell in audit[1]]
+    assert audit.max_row == 2
+    assert audit.cell(row=2, column=audit_headers.index("Hành động") + 1).value == "Chấp thuận đề xuất"
+    assert audit.cell(row=2, column=audit_headers.index("Revision sau") + 1).value == 1
+    confirmed = workbook["04_ConfirmedGroups"]
+    confirmed_headers = [cell.value for cell in confirmed[1]]
+    approved_row = next(
+        row
+        for row in confirmed.iter_rows(min_row=2)
+        if row[confirmed_headers.index("Mã nhóm")].value == _group_id(base_result)
+    )
+    assert approved_row[confirmed_headers.index("Trạng thái xác minh")].value == "Đã chấp thuận"
+    allocation = workbook["05_AllocationEdges"]
+    allocation_headers = [cell.value for cell in allocation[1]]
+    cash_column = allocation_headers.index("Số tiền phân bổ")
+    assert (
+        sum(row[cash_column].value for row in allocation.iter_rows(min_row=2))
+        == dashboard_after_approval.json()["kpis"]["confirmed_cash_allocated_minor"]
+    )
 
 
 def test_undo_is_blocked_when_a_downstream_review_revision_exists(

@@ -50,6 +50,24 @@ const reasonCode: Record<string, string> = {
   OVERPAY_RESIDUAL: "Có tiền nhận chưa phân bổ",
   AMBIGUOUS_MATCH: "Có nhiều phương án đối chiếu",
   FUZZY_REFERENCE: "Tham chiếu gần giống, cần kiểm tra",
+  AMBIGUOUS_CANDIDATES: "Có nhiều phương án đối chiếu",
+  PROPOSED_BANK: "Có đề xuất nhưng chưa xác nhận",
+  POSSIBLE_REIMPORT: "Có khả năng nhập lặp",
+  DEBIT_EXCLUDED: "Giao dịch tiền ra không tham gia",
+  CURRENCY_MISMATCH: "Khác loại tiền",
+  REFERENCE_COLLISION: "Mã tham chiếu bị trùng",
+};
+const residualBucket: Record<string, string> = {
+  UP_TO_1_PERCENT: "Đến 1% tổng phải thu",
+  ONE_TO_FIVE_PERCENT: "Trên 1% đến 5%",
+  OVER_FIVE_PERCENT: "Trên 5%",
+};
+const lagBucket: Record<string, string> = {
+  BEFORE_ORDER: "Trước ngày đơn hàng",
+  SAME_DAY: "Cùng ngày",
+  ONE_DAY: "Sau 1 ngày",
+  TWO_TO_THREE_DAYS: "Sau 2–3 ngày",
+  OVER_THREE_DAYS: "Sau hơn 3 ngày",
 };
 function includesQuery(values: unknown[], query: string) {
   if (!query) return true;
@@ -108,6 +126,8 @@ export function Dashboard({
   const normalizedQuery = query.trim().toLocaleLowerCase("vi");
   const layerChart = buildLayerChartModel(data.layer_counts);
   const paymentChart = buildPaymentStatusChartModel(data);
+  const analytics = data.analytics;
+  const exceptionReasons = Object.entries(analytics.exception_reason_counts);
   const bridgeInputs = [
     data.kpis.expected_receivable_minor,
     data.kpis.confirmed_cash_allocated_minor,
@@ -158,10 +178,10 @@ export function Dashboard({
     setDetailLoading(id);
     setDetailError(null);
     try {
-      if (kind === "orders") setDetail(await api.orderDetail(runId, id));
-      if (kind === "bank") setDetail(await api.bankTransactionDetail(runId, id));
-      if (kind === "exceptions") setDetail(await api.exceptionDetail(runId, id));
-      if (kind === "groups") setDetail(normalizeGroupDetail(await api.groupDetail(runId, id)));
+      if (kind === "orders") setDetail(await api.orderDetail(runId, id, data.effective_revision));
+      if (kind === "bank") setDetail(await api.bankTransactionDetail(runId, id, data.effective_revision));
+      if (kind === "exceptions") setDetail(await api.exceptionDetail(runId, id, data.effective_revision));
+      if (kind === "groups") setDetail(normalizeGroupDetail(await api.groupDetail(runId, id, data.effective_revision)));
     } catch (caught) {
       setDetailError(caught instanceof Error ? caught.message : "Không thể mở chi tiết giao dịch");
     } finally {
@@ -204,7 +224,14 @@ export function Dashboard({
       </section>
 
       <section className="dashboard-section" aria-labelledby="analysis-title">
-        <div className="section-label"><span>B</span><div><h2 id="analysis-title">Phân tích kết quả</h2><p>So sánh số nhóm được tìm thấy qua từng phương pháp và trạng thái thu tiền.</p></div></div>
+        <div className="section-label"><span>B</span><div><h2 id="analysis-title">Phân tích kết quả</h2><p>Các chỉ số dưới đây cùng thuộc revision {data.effective_revision}; đề xuất chưa duyệt không được tính vào tiền đã xác nhận.</p></div></div>
+        <div className="review-metric-grid" aria-label="Phân tích xác minh">
+          <article><span>Đề xuất đang chờ</span><strong>{analytics.review_status_counts.OPEN ?? 0}</strong></article>
+          <article><span>Đề xuất đã chấp thuận</span><strong>{analytics.review_status_counts.APPROVED ?? 0}</strong></article>
+          <article><span>Đề xuất đã từ chối</span><strong>{analytics.review_status_counts.REJECTED ?? 0}</strong></article>
+          <article><span>Quyết định đã hoàn tác</span><strong>{analytics.review_decision_counts.UNDO_ACTION ?? 0}</strong></article>
+          <article><span>Tỷ lệ nhóm đã xác nhận</span><strong>{analytics.method_summary.confirmation_rate_percent.toLocaleString("vi-VN", { maximumFractionDigits: 2 })}%</strong><small>{analytics.method_summary.confirmed_groups}/{analytics.method_summary.total_relation_groups} nhóm; mẫu số gồm mọi nhóm quan hệ.</small></article>
+        </div>
         <div className="chart-grid">
           <article className="surface chart-card" data-chart="matching-layers">
             <div className="chart-heading"><div><h3>Nhóm đối chiếu theo phương pháp</h3><p>Đơn vị là nhóm đối chiếu, không phải từng giao dịch ngân hàng. Đề xuất chưa xác nhận không tạo phân bổ và không đi vào KPI tiền.</p></div></div>
@@ -250,6 +277,28 @@ export function Dashboard({
             {!paymentChart.isConsistent && <p className="chart-warning" role="status">Tổng trạng thái ({paymentChart.countedTotal.toLocaleString("vi-VN")}) chưa khớp số đơn đủ điều kiện ({paymentChart.eligibleTotal.toLocaleString("vi-VN")}).</p>}
           </article>
         </div>
+        <div className="analytics-detail-grid">
+          <article className="surface analytics-card">
+            <h3>Quan hệ thanh toán đã xác nhận</h3>
+            <p>Đơn vị: nhóm đối chiếu đã xác nhận.</p>
+            <dl><div><dt>Thanh toán gộp</dt><dd>{analytics.confirmed_group_type_counts.MANY_ORDERS_ONE_BANK ?? 0}</dd></div><div><dt>Thanh toán nhiều lần</dt><dd>{analytics.confirmed_group_type_counts.ONE_ORDER_MANY_BANKS ?? 0}</dd></div><div><dt>Một–một</dt><dd>{analytics.confirmed_group_type_counts.ONE_TO_ONE ?? 0}</dd></div></dl>
+          </article>
+          <article className="surface analytics-card">
+            <h3>Phân bố phần tiền chưa giải quyết</h3>
+            <p>Ngưỡng theo tỷ lệ trên tổng phải thu {formatMoney(analytics.residual_distribution.denominator_minor, currency)}; hai sổ được trình bày riêng để tránh cộng trùng.</p>
+            <table><thead><tr><th>Mức</th><th>Đơn còn phải thu</th><th>Tiền ngân hàng chưa phân bổ</th></tr></thead><tbody>{analytics.residual_distribution.order_outstanding.map((bucket, index) => <tr key={bucket.bucket}><td>{residualBucket[bucket.bucket] ?? bucket.bucket}</td><td>{bucket.count} · {formatMoney(bucket.amount_minor, currency)}</td><td>{analytics.residual_distribution.bank_unapplied[index]?.count ?? 0} · {formatMoney(analytics.residual_distribution.bank_unapplied[index]?.amount_minor ?? 0, currency)}</td></tr>)}</tbody></table>
+          </article>
+          <article className="surface analytics-card">
+            <h3>Nguyên nhân ngoại lệ phổ biến</h3>
+            <p>Đơn vị: số mã lý do trên các trường hợp chưa giải quyết.</p>
+            {exceptionReasons.length ? <ol>{exceptionReasons.slice(0, 6).map(([code, count]) => <li key={code}><span>{reasonCode[code] ?? code}</span><strong>{count}</strong></li>)}</ol> : <p>Không có ngoại lệ trong revision này.</p>}
+          </article>
+          <article className="surface analytics-card">
+            <h3>Độ trễ giao dịch đã xác nhận</h3>
+            <p>Đơn vị quan sát: {analytics.confirmed_lag.observations} cặp phân bổ đơn hàng–giao dịch; trung vị {analytics.confirmed_lag.median_days === null ? "—" : `${analytics.confirmed_lag.median_days.toLocaleString("vi-VN")} ngày`}.</p>
+            <ol>{analytics.confirmed_lag.buckets.map((bucket) => <li key={bucket.bucket}><span>{lagBucket[bucket.bucket] ?? bucket.bucket}</span><strong>{bucket.count}</strong></li>)}</ol>
+          </article>
+        </div>
       </section>
 
       <ReconciliationReview
@@ -288,7 +337,7 @@ export function Dashboard({
         <article className={`surface export-panel ${data.conservation.is_valid ? "valid" : "invalid"}`}>
           <div className="export-status"><span aria-hidden="true">{data.conservation.is_valid ? "✓" : "!"}</span><div><strong>{data.conservation.is_valid ? "Bảo toàn tiền đã được xác minh" : "Phát hiện vi phạm bảo toàn tiền"}</strong><p>{data.conservation.is_valid ? "Không có phân bổ trùng hoặc phần chênh lệch bị mất." : data.conservation.violations.join(", ")}</p></div></div>
           <dl><div><dt>Mã phiên</dt><dd>{runId}</dd></div><div><dt>Lần sửa</dt><dd>{data.effective_revision}</dd></div><div><dt>Định dạng</dt><dd>Excel (.xlsx)</dd></div></dl>
-          <a className="primary link-button" href={`/api/runs/${runId}/exports?format=xlsx`}>Tải báo cáo Excel</a>
+          <a className="primary link-button" href={`/api/runs/${runId}/exports?format=xlsx&expected_revision=${data.effective_revision}`}>Tải báo cáo Excel</a>
         </article>
       </section>
 

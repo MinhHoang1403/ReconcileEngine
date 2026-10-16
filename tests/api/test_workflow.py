@@ -38,6 +38,14 @@ class MemorySession:
     def scalar(self, statement: object):
         return None
 
+    def scalars(self, statement: object):
+        class EmptyResult:
+            @staticmethod
+            def all() -> list[object]:
+                return []
+
+        return EmptyResult()
+
 
 def _xlsx_upload(headers: list[str], values: list[object]) -> bytes:
     output = BytesIO()

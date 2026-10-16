@@ -374,6 +374,19 @@ def main() -> None:
         )
         assert "Revision 1" in review_approved["revision"]
         assert review_approved["conservation"] is True
+        approved_snapshot = devtools.evaluate(
+            f"(async () => {{ const d = await (await fetch('/api/runs/{run_id}/dashboard?revision=1')).json(); "
+            f"const e = await fetch('/api/runs/{run_id}/exports?format=xlsx&expected_revision=1'); "
+            "const b = await e.arrayBuffer(); return {revision:d.effective_revision, "
+            "approved:d.analytics.review_status_counts.APPROVED, "
+            "approveActions:d.analytics.review_decision_counts.APPROVE_GROUP, "
+            "exportStatus:e.status, exportBytes:b.byteLength}; })()"
+        )
+        assert approved_snapshot["revision"] == 1
+        assert approved_snapshot["approved"] >= 1
+        assert approved_snapshot["approveActions"] >= 1
+        assert approved_snapshot["exportStatus"] == 200
+        assert approved_snapshot["exportBytes"] > 1000
         undo_clicked = devtools.evaluate(
             "(() => { const button = document.querySelector('.review-history tbody tr .text-button'); "
             "if (!button || button.disabled) return false; button.click(); return true; })()"
@@ -387,6 +400,11 @@ def main() -> None:
         devtools.evaluate("document.querySelector('.review-history').scrollIntoView({block:'center'})")
         time.sleep(0.3)
         capture(devtools, stage_path("review-undone"))
+        undone_snapshot = devtools.evaluate(
+            f"(async () => (await (await fetch('/api/runs/{run_id}/dashboard?revision=2')).json()).analytics)()"
+        )
+        assert undone_snapshot["review_status_counts"]["UNDONE"] >= 1
+        assert undone_snapshot["review_decision_counts"]["UNDO_ACTION"] >= 1
 
         click_button(devtools, "Tạo phiên mới")
         wait_until(devtools, "document.body.innerText.includes('Đối soát giao dịch tài chính')")
@@ -417,6 +435,10 @@ def main() -> None:
                 "layer_tooltip": layer_tooltip,
                 "payment_tooltip": payment_tooltip,
                 "review_approve_undo_verified": True,
+                "revision_consistency": {
+                    "approved": approved_snapshot,
+                    "undone": undone_snapshot["review_decision_counts"]["UNDO_ACTION"],
+                },
                 "screenshots": screenshots,
             }
         )

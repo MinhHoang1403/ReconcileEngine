@@ -23,7 +23,7 @@ API HTTP không gắn nhãn phiên bản trong path. OpenAPI tương tác có t�
 | POST | `/api/uploads/{session_id}/resolutions` | Exclude có lý do/acknowledge và chạy lại gate |
 | POST | `/api/runs` | Chạy một snapshot bằng Python Core duy nhất |
 | GET | `/api/runs/{run_id}` | Metadata/policy để mở lại run |
-| GET | `/api/runs/{run_id}/dashboard` | KPI, layer counts, payment statuses và conservation |
+| GET | `/api/runs/{run_id}/dashboard` | KPI, analytics, layer counts, payment statuses và conservation |
 | GET | `/api/runs/{run_id}/groups` | Nhóm ghép, phân trang; lọc `link_status` |
 | GET | `/api/runs/{run_id}/groups/{group_id}` | Nhóm, bản ghi hai phía, allocation edges, bằng chứng và lineage nguồn |
 | GET | `/api/runs/{run_id}/orders` | Khoản phải thu + allocated/outstanding/status, phân trang |
@@ -32,7 +32,7 @@ API HTTP không gắn nhãn phiên bản trong path. OpenAPI tương tác có t�
 | GET | `/api/runs/{run_id}/bank-transactions/{bank_txn_id}` | Chi tiết quan hệ và truy vết của một giao dịch thanh toán |
 | GET | `/api/runs/{run_id}/exceptions` | Exception cases, phân trang |
 | GET | `/api/runs/{run_id}/exceptions/{exception_id}` | Chi tiết các bản ghi và bằng chứng liên quan đến một exception |
-| GET | `/api/runs/{run_id}/exports?format=xlsx` | Workbook chín sheet của effective revision |
+| GET | `/api/runs/{run_id}/exports?format=xlsx&expected_revision={revision}` | Workbook chín sheet; từ chối 409 nếu dashboard đã cũ |
 | GET | `/api/runs/{run_id}/reviews` | Review queue theo effective revision; tìm kiếm, lọc loại quan hệ và phân trang |
 | GET | `/api/runs/{run_id}/reviews/history` | Audit approve/reject/undo đã commit, phân trang |
 | POST | `/api/runs/{run_id}/reviews/approve` | Chấp thuận proposal hợp lệ và tạo effective revision mới |
@@ -41,7 +41,7 @@ API HTTP không gắn nhãn phiên bản trong path. OpenAPI tương tác có t�
 
 Ba endpoint review nhận `expected_revision` và `idempotency_key` trong JSON body. Approve/reject nhận `group_id` và bắt buộc có `note` nêu bằng chứng hoặc lý do quyết định; undo nhận `action_id` và note tùy chọn. `actor_label` chỉ là nhãn audit do người dùng nhập trong demo local, không phải danh tính đã xác thực. Một retry có cùng key và cùng payload trả lại cùng `action_id` với `idempotent_replay=true`; cùng key nhưng payload khác bị từ chối.
 
-Các endpoint danh sách nhận `page >= 1`, `1 <= page_size <= 200`; response là `{items, page, page_size, total}`. Frontend tải 50 bản ghi mỗi lần và luôn tách “đã tải” khỏi tổng số trên server. Dữ liệu lớn không được trả toàn bộ trong một JSON.
+Các endpoint dashboard, danh sách và detail nhận `revision >= 0` tùy chọn; khi không truyền sẽ đọc revision hiện hành. Các endpoint danh sách nhận `page >= 1`, `1 <= page_size <= 200`; response là `{run_id, effective_revision, items, page, page_size, total}`. Frontend đọc metadata run trước, ghim mọi request dashboard/explorer/detail vào cùng revision, tải 50 bản ghi mỗi lần và luôn tách “đã tải” khỏi tổng số trên server. Dữ liệu lớn không được trả toàn bộ trong một JSON.
 
 ## Upload và an toàn
 
@@ -57,4 +57,4 @@ Lỗi nghiệp vụ trả `detail.error_code` và thông điệp tiếng Việt.
 
 ## Snapshot và tiền
 
-Một run lưu mapping/policy, input hashes, rule identifier, semantic checksum, canonical Parquet, result JSON, groups, allocation edges và artifact manifest. Revision 0 là kết quả engine; mỗi review đã commit tạo một `RunRevision` bất biến, một `ReviewAction`, snapshot group/edge/adjustment và result artifact riêng. API đọc revision được `runs.current_revision` công bố, vì vậy dashboard, explorer và export không trộn base result với revision review. `conservation.is_valid` chỉ đúng khi mọi phương trình bank/order/toàn run không có vi phạm. Proposed groups không tạo allocation và không đi vào confirmed KPI. Điều chỉnh đã xác minh là thành phần phi tiền mặt riêng: `expected = confirmed cash + verified adjustments + outstanding`; không được gộp vào tiền mặt đã nhận.
+Một run lưu mapping/policy, input hashes, rule identifier, semantic checksum, canonical Parquet, result JSON, groups, allocation edges và artifact manifest. Revision 0 là kết quả engine; mỗi review đã commit tạo một `RunRevision` bất biến, một `ReviewAction`, snapshot group/edge/adjustment và result artifact riêng. Dashboard và explorer có thể đọc một snapshot bất biến bằng `revision`; export yêu cầu `expected_revision` để không vô tình xuất revision khác màn hình. Analytics xác định rõ mẫu số: tỷ lệ xác nhận dùng toàn bộ relation groups; lag dùng từng cặp allocation đã xác nhận; outstanding và unapplied được trình bày thành hai sổ riêng để tránh cộng trùng. `conservation.is_valid` chỉ đúng khi mọi phương trình bank/order/toàn run không có vi phạm. Proposed groups không tạo allocation và không đi vào confirmed KPI. Điều chỉnh đã xác minh là thành phần phi tiền mặt riêng: `expected = confirmed cash + verified adjustments + outstanding`; không được gộp vào tiền mặt đã nhận.

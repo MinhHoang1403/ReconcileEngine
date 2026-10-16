@@ -73,8 +73,11 @@ export function App() {
   }
 
   async function loadRun(id: string) {
-    const [run, summary, groupPage, exceptionPage, orderPage, bankPage] = await Promise.all([
-      api.run(id), api.dashboard(id), api.groups(id), api.exceptions(id), api.orders(id), api.bankTransactions(id),
+    const run = await api.run(id);
+    const revision = run.effective_revision;
+    const [summary, groupPage, exceptionPage, orderPage, bankPage] = await Promise.all([
+      api.dashboard(id, revision), api.groups(id, 1, 50, revision), api.exceptions(id, 1, 50, revision),
+      api.orders(id, 1, 50, revision), api.bankTransactions(id, 1, 50, revision),
     ]);
     setRunId(id);
     setDashboard(summary);
@@ -96,19 +99,19 @@ export function App() {
     try {
       const page = Math.floor(current.length / 50) + 1;
       if (kind === "orders") {
-        const next = await api.orders(runId, page);
+        const next = await api.orders(runId, page, 50, dashboard?.effective_revision);
         setOrders((items) => [...items, ...next.items]);
       }
       if (kind === "bank") {
-        const next = await api.bankTransactions(runId, page);
+        const next = await api.bankTransactions(runId, page, 50, dashboard?.effective_revision);
         setBankTransactions((items) => [...items, ...next.items]);
       }
       if (kind === "groups") {
-        const next = await api.groups(runId, page);
+        const next = await api.groups(runId, page, 50, dashboard?.effective_revision);
         setGroups((items) => [...items, ...next.items]);
       }
       if (kind === "exceptions") {
-        const next = await api.exceptions(runId, page);
+        const next = await api.exceptions(runId, page, 50, dashboard?.effective_revision);
         setExceptions((items) => [...items, ...next.items]);
       }
     } catch (caught) {

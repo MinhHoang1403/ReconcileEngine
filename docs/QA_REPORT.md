@@ -8,7 +8,7 @@ Ngày kiểm tra gần nhất: 2026-10-16. Môi trường: Windows/PowerShell, D
 |---|---|---|
 | Python lint | `uv run ruff check .` | Pass |
 | Python format | `uv run ruff format --check .` | Pass |
-| Python tests | `uv run pytest -q` | 93 passed; một deprecation warning từ FastAPI TestClient |
+| Python tests | `uv run pytest -q` | 94 passed; một deprecation warning từ FastAPI TestClient |
 | Golden | `uv run pytest tests/golden -q` | 28 tests pass; catalog đủ 24 fixtures F01–F24, gồm conflict F19 và undo dependency F20 |
 | Property | `uv run pytest tests/property -q` | 4 passed; các bất biến bảo toàn tiền đạt |
 | VND/CSV/XLSX/API | `uv run pytest tests/unit/test_money.py tests/integration/test_ingestion.py tests/api/test_workflow.py -q` | 36 passed |
@@ -34,6 +34,14 @@ Review queue và history đọc cùng effective revision, có tìm kiếm, lọc
 F19 được chạy trên PostgreSQL thật với hai proposal cạnh tranh cùng `TXN00007`: request từ revision 4 đầu tiên tạo revision 5 và đúng hai edges tổng 500.000 VND; request thứ hai vẫn gửi revision 4 trả HTTP 409. Conservation vẫn hợp lệ và bank không bị cấp vượt 500.000 VND. F20 được chạy trên run `32d41d11-58f2-409d-8d51-23c42bb2233b`: sau approve revision 3 và reject downstream revision 4, undo action ở revision 3 trả HTTP 409, current revision vẫn là 4. Unit/API tests cũng xác minh undo hợp lệ tạo revision mới, phục hồi snapshot trước và giữ audit cũ.
 
 Browser smoke Edge headless đi qua upload demo, Health, reconcile, charts, drawer, export, chọn proposal có thể duyệt, xem allocation preview, approve, kiểm tra revision/conservation, undo và mở lại run. Kết quả `review_approve_undo_verified=true`; ảnh kiểm tra nằm ngoài repository trong thư mục tạm `smartrecon-review-checkpoint-b`. Frontend lint pass, 19 tests pass và production build pass; cảnh báo Plotly chunk lớn vẫn là hạn chế đã biết, không phải lỗi build.
+
+## Analytics và báo cáo theo revision
+
+Dashboard đọc analytics từ immutable result snapshot và audit actions đến đúng revision. Tỷ lệ xác nhận dùng toàn bộ relation groups làm mẫu số; lag dùng allocation pair đã xác nhận; residual orders/bank tách riêng. Frontend ghim dashboard, explorer, detail và phân trang vào revision đọc từ metadata run; review queue phát hiện snapshot lệch và khóa thao tác cho tới khi tải lại.
+
+Excel giữ nguyên chín sheet, bổ sung `Trạng thái xác minh` trong group sheets và review audit thật gồm revision, allocation delta, note, actor label và liên kết undo. API export nhận `expected_revision` và trả 409 khi client cũ. Integration test xác nhận workbook revision 1 có action approve, group `APPROVED`, tổng allocation bằng KPI dashboard; historical dashboard/explorer revision 1 vẫn đọc đúng sau khi run đã sang revision 2.
+
+Docker/browser acceptance tại `1366x768` dùng run `423395c5-1901-40c8-88ab-6926b38b0637`: approve tạo revision 1, dashboard ghi nhận một proposal `APPROVED` và một approve action; workbook revision 1 trả HTTP 200, 54.829 bytes; undo tạo revision 2 và analytics ghi nhận một undo action. Conservation vẫn hợp lệ, run mở lại được và không có lỗi browser/network. Ảnh analytics được sinh ngoài repository trong thư mục tạm `smartrecon-analytics-c`.
 
 ## Quy tắc VND có phần thập phân
 

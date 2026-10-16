@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 from pathlib import Path
 
 from openpyxl import load_workbook
@@ -48,6 +49,19 @@ def test_formula_injection_is_exported_as_text(tmp_path: Path, monkeypatch) -> N
         "formula-test",
         result,
         source_manifest={"files": {"orders": {"name": "orders.csv", "sheet": None}}},
+        review_audit=[
+            {
+                "action_id": "action-1",
+                "created_at": datetime(2026, 10, 16, 9, 0, tzinfo=UTC),
+                "action_type": "REJECT_GROUP",
+                "revision_before": 0,
+                "revision_after": 1,
+                "target_group_id": "candidate-1",
+                "allocation_delta_minor": 0,
+                "actor_is_authenticated": False,
+                "note": "Không đủ bằng chứng",
+            }
+        ],
     )
     workbook = load_workbook(path, data_only=False)
     assert workbook.sheetnames == [
@@ -76,5 +90,8 @@ def test_formula_injection_is_exported_as_text(tmp_path: Path, monkeypatch) -> N
     assert sheet.freeze_panes == "A2"
     assert sheet.cell(row=2, column=headers.index("Tệp nguồn") + 1).value == "orders.csv"
     assert all(cell.data_type != "f" for worksheet in workbook.worksheets for row in worksheet for cell in row)
+    audit = workbook["08_ReviewAudit"]
+    assert audit.cell(row=2, column=2).value == datetime(2026, 10, 16, 9, 0)
+    assert audit.cell(row=2, column=3).value == "Từ chối đề xuất"
     assert safe_excel_value("-123") == "'-123"
     assert safe_excel_value(-123) == -123

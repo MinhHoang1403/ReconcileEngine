@@ -92,10 +92,41 @@ export type DashboardData = {
   kpis: Record<string, number | string | null | Record<string, number>>;
   layer_counts: Record<string, { confirmed_groups: number; proposed_groups: number }>;
   payment_status_counts: Record<string, number>;
+  analytics: {
+    review_status_counts: Record<string, number>;
+    review_decision_counts: Record<string, number>;
+    method_summary: {
+      confirmed_groups: number;
+      proposed_groups: number;
+      total_relation_groups: number;
+      confirmation_rate_percent: number;
+      confirmation_rate_denominator: string;
+    };
+    confirmed_group_type_counts: Record<string, number>;
+    exception_reason_counts: Record<string, number>;
+    residual_distribution: {
+      denominator_minor: number;
+      order_outstanding: { bucket: string; count: number; amount_minor: number }[];
+      bank_unapplied: { bucket: string; count: number; amount_minor: number }[];
+    };
+    confirmed_lag: {
+      observation_unit: string;
+      observations: number;
+      median_days: number | null;
+      buckets: { bucket: string; count: number }[];
+    };
+  };
   conservation: { is_valid: boolean; violations: string[] };
 };
 
-export type Paged<T> = { items: T[]; page: number; page_size: number; total: number };
+export type Paged<T> = {
+  run_id: string;
+  effective_revision: number;
+  items: T[];
+  page: number;
+  page_size: number;
+  total: number;
+};
 
 export type GroupRow = {
   group_id: string;

@@ -38,6 +38,14 @@ AMOUNT_BASIS = {
     "GROSS_REPORT": "Báo cáo giá trị gộp",
 }
 LINK_STATUS = {"CONFIRMED": "Đã xác nhận", "PROPOSED": "Đề xuất, chưa xác nhận"}
+REVIEW_STATUS = {
+    "NOT_REQUIRED": "Không cần xác minh",
+    "OPEN": "Chờ xác minh",
+    "APPROVED": "Đã chấp thuận",
+    "REJECTED": "Đã từ chối",
+    "NEEDS_MORE_INFO": "Cần thêm thông tin",
+    "UNDONE": "Đã hoàn tác",
+}
 GROUP_TYPE = {
     "ONE_TO_ONE": "Một đơn – một giao dịch",
     "MANY_ORDERS_ONE_BANK": "Nhiều đơn – một giao dịch",
@@ -105,6 +113,16 @@ def _display_datetime(value: Any) -> str:
         except ValueError:
             return str(value)
     return parsed.strftime("%d/%m/%Y %H:%M")
+
+
+def _excel_datetime(value: Any) -> datetime | None:
+    """Return a timezone-naive UTC datetime accepted by spreadsheet writers."""
+    if not value:
+        return None
+    parsed = value if isinstance(value, datetime) else datetime.fromisoformat(str(value))
+    if parsed.tzinfo is not None:
+        parsed = parsed.astimezone(UTC).replace(tzinfo=None)
+    return parsed
 
 
 def _reason_text(values: list[str]) -> str:
@@ -222,6 +240,7 @@ def _group_row(item: dict[str, Any]) -> dict[str, Any]:
             "Mã đơn hàng": _joined(item.get("order_ids")),
             "Mã giao dịch": _joined(item.get("bank_txn_ids")),
             "Trạng thái liên kết": LINK_STATUS.get(item.get("link_status", ""), item.get("link_status", "")),
+            "Trạng thái xác minh": REVIEW_STATUS.get(item.get("review_status", ""), item.get("review_status", "")),
             "Trạng thái thanh toán": " · ".join(
                 f"{key}: {PAYMENT_STATUS.get(value, value)}" for key, value in statuses.items()
             ),
@@ -267,6 +286,32 @@ def _exception_rows(result: dict[str, Any]) -> list[dict[str, Any]]:
             }
         )
         for item in result.get("exceptions", [])
+    ]
+
+
+def _review_audit_rows(review_audit: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    action_labels = {
+        "APPROVE_GROUP": "Chấp thuận đề xuất",
+        "REJECT_GROUP": "Từ chối đề xuất",
+        "UNDO_ACTION": "Hoàn tác quyết định",
+    }
+    return [
+        _safe_row(
+            {
+                "Mã hành động": item.get("action_id", ""),
+                "Thời điểm": _excel_datetime(item.get("created_at")),
+                "Hành động": action_labels.get(item.get("action_type", ""), item.get("action_type", "")),
+                "Revision trước": item.get("revision_before"),
+                "Revision sau": item.get("revision_after"),
+                "Mã nhóm": item.get("target_group_id", ""),
+                "Tiền thay đổi": item.get("allocation_delta_minor", 0),
+                "Nhãn người thao tác": item.get("actor_label", ""),
+                "Danh tính đã xác thực": "Không" if not item.get("actor_is_authenticated") else "Có",
+                "Ghi chú": item.get("note", ""),
+                "Hoàn tác hành động": item.get("undo_of_action_id", ""),
+            }
+        )
+        for item in review_audit
     ]
 
 
@@ -476,12 +521,14 @@ def create_excel_export(
     *,
     run_metadata: dict[str, Any] | None = None,
     source_manifest: dict[str, Any] | None = None,
+    review_audit: list[dict[str, Any]] | None = None,
 ) -> Path:
     """Generate a readable run-scoped workbook without formula-based business logic."""
     output = run_directory(run_id) / "exports" / f"reconciliation-r{revision}.xlsx"
     output.parent.mkdir(parents=True, exist_ok=True)
     run_metadata = run_metadata or {}
     source_manifest = source_manifest or {}
+    review_audit = review_audit or []
     manifest_path = run_directory(run_id) / "run_manifest.json"
     manifest = json.loads(manifest_path.read_text(encoding="utf-8")) if manifest_path.exists() else {}
     manifest_payload = {
@@ -577,15 +624,20 @@ def create_excel_export(
         ),
         (
             "08_ReviewAudit",
+            _review_audit_rows(review_audit),
             [
-                {
-                    "Thời điểm": "",
-                    "Hành động": "Chưa có thao tác đánh giá trong phạm vi hiện tại",
-                    "Mã đối tượng": "",
-                    "Ghi chú": "",
-                }
+                "Mã hành động",
+                "Thời điểm",
+                "Hành động",
+                "Revision trước",
+                "Revision sau",
+                "Mã nhóm",
+                "Tiền thay đổi",
+                "Nhãn người thao tác",
+                "Danh tính đã xác thực",
+                "Ghi chú",
+                "Hoàn tác hành động",
             ],
-            ["Thời điểm", "Hành động", "Mã đối tượng", "Ghi chú"],
         ),
         ("09_RunManifest", _flatten_manifest(manifest_payload), ["Thông tin", "Giá trị"]),
     ]

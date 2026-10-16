@@ -46,10 +46,13 @@ class DashboardResponse(BaseModel):
     kpis: dict[str, Any]
     layer_counts: dict[str, Any]
     payment_status_counts: dict[str, int]
+    analytics: dict[str, Any]
     conservation: dict[str, Any]
 
 
 class PageResponse(BaseModel):
+    run_id: str
+    effective_revision: int
     items: list[dict[str, Any]]
     page: int
     page_size: int
