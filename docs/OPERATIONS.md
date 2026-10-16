@@ -24,6 +24,8 @@ Backend chờ PostgreSQL healthy, chạy `alembic upgrade head`, rồi mới kh�
 
 Trong website, chọn demo VND hoặc upload hai feed, xác nhận mapping, xử lý Health Gate, chạy đối soát và tải Excel. Có thể dán `run_id` tại trang đầu để mở lại snapshot.
 
+Review API yêu cầu client gửi `expected_revision` hiện đang hiển thị và một `idempotency_key` duy nhất cho thao tác. Khi nhận `STALE_REVISION`, client phải tải lại run/review queue trước khi thử quyết định mới. Retry do mất kết nối phải giữ nguyên cả key lẫn payload. Không sửa trực tiếp bảng revision/action hoặc result artifact trong volume.
+
 ## Kiểm tra và chẩn đoán
 
 ```powershell

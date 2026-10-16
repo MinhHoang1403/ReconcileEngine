@@ -33,6 +33,11 @@ API HTTP không gắn nhãn phiên bản trong path. OpenAPI tương tác có t�
 | GET | `/api/runs/{run_id}/exceptions` | Exception cases, phân trang |
 | GET | `/api/runs/{run_id}/exceptions/{exception_id}` | Chi tiết các bản ghi và bằng chứng liên quan đến một exception |
 | GET | `/api/runs/{run_id}/exports?format=xlsx` | Workbook chín sheet của effective revision |
+| POST | `/api/runs/{run_id}/reviews/approve` | Chấp thuận proposal hợp lệ và tạo effective revision mới |
+| POST | `/api/runs/{run_id}/reviews/reject` | Từ chối proposal, không tạo allocation, và tạo revision mới |
+| POST | `/api/runs/{run_id}/reviews/undo` | Hoàn tác action gần nhất khi chưa có revision phụ thuộc |
+
+Ba endpoint review nhận `expected_revision` và `idempotency_key` trong JSON body. Approve/reject nhận `group_id`; undo nhận `action_id`. `actor_label` chỉ là nhãn audit do người dùng nhập trong demo local, không phải danh tính đã xác thực. Một retry có cùng key và cùng payload trả lại cùng `action_id` với `idempotent_replay=true`; cùng key nhưng payload khác bị từ chối.
 
 Các endpoint danh sách nhận `page >= 1`, `1 <= page_size <= 200`; response là `{items, page, page_size, total}`. Frontend tải 50 bản ghi mỗi lần và luôn tách “đã tải” khỏi tổng số trên server. Dữ liệu lớn không được trả toàn bộ trong một JSON.
 
@@ -46,8 +51,8 @@ Các endpoint danh sách nhận `page >= 1`, `1 <= page_size <= 200`; response l
 
 ## Lỗi ổn định
 
-Lỗi nghiệp vụ trả `detail.error_code` và thông điệp tiếng Việt. Các mã chính: `INVALID_UPLOAD` (400), upload quá 25 MB (413), `INVALID_MAPPING`/`INVALID_RESOLUTION` (422), `UPLOAD_NOT_FOUND`/`RUN_NOT_FOUND`/`GROUP_NOT_FOUND` (404), `HEALTH_BLOCKED` hoặc `MAPPING_REQUIRED` (409), `DATABASE_UNAVAILABLE` (503). Pydantic trả 422 khi DTO sai kiểu hoặc ngoài giới hạn.
+Lỗi nghiệp vụ trả `detail.error_code` và thông điệp tiếng Việt. Các mã chính: `INVALID_UPLOAD` (400), upload quá 25 MB (413), `INVALID_MAPPING`/`INVALID_RESOLUTION` (422), `UPLOAD_NOT_FOUND`/`RUN_NOT_FOUND`/`GROUP_NOT_FOUND`/`REVIEW_ACTION_NOT_FOUND` (404), `HEALTH_BLOCKED`, `MAPPING_REQUIRED`, `STALE_REVISION`, `IDEMPOTENCY_KEY_REUSED`, `ALLOCATION_CONFLICT`, `COMPLEX_GROUP_NOT_APPROVABLE` hoặc `UNDO_DEPENDENCY_CONFLICT` (409), `DATABASE_UNAVAILABLE` (503). Pydantic trả 422 khi DTO sai kiểu hoặc ngoài giới hạn.
 
 ## Snapshot và tiền
 
-Một run lưu mapping/policy, input hashes, rule identifier, semantic checksum, canonical Parquet, result JSON, groups, allocation edges và artifact manifest. `conservation.is_valid` chỉ đúng khi mọi phương trình bank/order/toàn run không có vi phạm. Proposed groups không tạo allocation và không đi vào confirmed KPI. Điều chỉnh đã xác minh là thành phần phi tiền mặt riêng: `expected = confirmed cash + verified adjustments + outstanding`; không được gộp vào tiền mặt đã nhận.
+Một run lưu mapping/policy, input hashes, rule identifier, semantic checksum, canonical Parquet, result JSON, groups, allocation edges và artifact manifest. Revision 0 là kết quả engine; mỗi review đã commit tạo một `RunRevision` bất biến, một `ReviewAction`, snapshot group/edge/adjustment và result artifact riêng. API đọc revision được `runs.current_revision` công bố, vì vậy dashboard, explorer và export không trộn base result với revision review. `conservation.is_valid` chỉ đúng khi mọi phương trình bank/order/toàn run không có vi phạm. Proposed groups không tạo allocation và không đi vào confirmed KPI. Điều chỉnh đã xác minh là thành phần phi tiền mặt riêng: `expected = confirmed cash + verified adjustments + outstanding`; không được gộp vào tiền mặt đã nhận.

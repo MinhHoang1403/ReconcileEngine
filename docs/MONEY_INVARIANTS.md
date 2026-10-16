@@ -25,6 +25,8 @@ SUM E(o) = SUM A(o,b) + SUM F(o) + SUM R(o)
 
 Proposal không nằm trong `A`. Debit và gross-only report không nằm trong `C`. Order không eligible không nằm trong `E`.
 
+Mỗi review revision phải kiểm tra lại toàn bộ các phương trình trên trước khi được công bố. Approve chỉ tạo cash edges trong phần residual còn hợp lệ; reject không thay đổi `A` hoặc `F`; undo khôi phục một snapshot trước đó rồi kiểm tra lại invariant. PostgreSQL `current_revision` chỉ được cập nhật trong cùng transaction với audit và effective-state records. Result artifact của revision được ghi nguyên tử trước commit; nếu commit lỗi, transaction rollback và artifact chưa công bố bị loại bỏ.
+
 ## Diễn giải chênh lệch
 
 - Underpayment có strong ref: allocation tối đa bằng cash, residual order giữ nguyên và trạng thái `PARTIAL`.

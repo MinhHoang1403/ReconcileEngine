@@ -27,7 +27,8 @@ Tài liệu này phân biệt nguồn nghiên cứu, đặc tả chính thức, 
 
 ## SQL, transaction và persistence
 
-- [PostgreSQL Transaction Isolation](https://www.postgresql.org/docs/current/transaction-iso.html) mô tả isolation levels và serialization failures. Phạm vi hiện tại chưa triển khai workflow review cạnh tranh, nhưng schema giữ revision/audit để mở rộng đúng transaction sau này.
+- [PostgreSQL Transaction Isolation](https://www.postgresql.org/docs/current/transaction-iso.html) mô tả isolation levels và serialization failures. Review dùng optimistic `expected_revision` trong transaction để phát hiện client stale.
+- [PostgreSQL Explicit Locking](https://www.postgresql.org/docs/current/explicit-locking.html) là nguồn chính thức cho row-level locking. SmartRecon khóa hàng `runs` bằng `SELECT FOR UPDATE`, sau đó kiểm tra revision, idempotency, allocation và invariant trước khi commit revision/audit/effective state.
 - [SQLAlchemy ORM documentation](https://docs.sqlalchemy.org/en/20/orm/) và [Alembic tutorial](https://alembic.sqlalchemy.org/en/latest/tutorial.html) là tài liệu chính thức cho persistence/migration.
 - [DuckDB concurrency](https://duckdb.org/docs/stable/connect/concurrency) nêu mô hình thư viện nhúng. Dự án dùng DuckDB cho analytics trong tiến trình, không làm shared transaction server.
 

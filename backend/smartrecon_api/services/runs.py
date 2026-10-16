@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -17,6 +17,7 @@ from backend.smartrecon_api.db.models import (
     ReconciliationRun,
     RunRevision,
     UploadSession,
+    VerifiedAdjustmentRecord,
 )
 from backend.smartrecon_api.schemas.runs import RunRequest
 from backend.smartrecon_api.services.artifacts import (
@@ -27,6 +28,28 @@ from backend.smartrecon_api.services.artifacts import (
 from backend.smartrecon_api.services.serialization import hash_json, read_json, to_jsonable, write_json
 from backend.smartrecon_api.services.uploads import normalize_session
 from smartrecon.config import ReconciliationPolicy
+from smartrecon.domain.invariants import ConservationReport
+from smartrecon.domain.models import (
+    AllocationEdge,
+    BankTransaction,
+    Candidate,
+    ExceptionCase,
+    MatchEvidence,
+    MatchGroup,
+    Order,
+    SourceLineage,
+    VerifiedAdjustment,
+)
+from smartrecon.domain.statuses import (
+    AmountBasis,
+    Currency,
+    Direction,
+    GroupType,
+    LinkStatus,
+    OrderStatus,
+    PaymentStatus,
+    ReviewStatus,
+)
 from smartrecon.engine import ReconciliationResult, run_reconciliation
 
 
@@ -81,35 +104,14 @@ def execute_run(db: Session, session: UploadSession, request: RunRequest) -> Rec
         RunRevision(
             run_id=run_id,
             revision=0,
-            effective_checksum=result.semantic_checksum,
+            parent_revision=None,
+            action_id=None,
+            effective_checksum=hash_json(result_payload),
+            result_artifact_path=relative_artifact_path(result_path),
             summary=result.kpis,
         )
     )
-    for group in result.groups:
-        db.add(
-            MatchGroupRecord(
-                run_id=run_id,
-                revision=0,
-                group_id=group.group_id,
-                group_type=group.group_type.value,
-                link_status=group.link_status.value,
-                review_status=group.review_status.value,
-                evidence=to_jsonable(group),
-            )
-        )
-    for edge in result.allocations:
-        db.add(
-            AllocationEdgeRecord(
-                run_id=run_id,
-                revision=0,
-                edge_id=edge.edge_id,
-                group_id=edge.group_id,
-                order_id=edge.order_id,
-                bank_txn_id=edge.bank_txn_id,
-                allocated_cash_minor=edge.allocated_cash_minor,
-                currency=edge.currency.value,
-            )
-        )
+    persist_effective_records(db, run_id, 0, result)
     for artifact_type, path in (
         ("RESULT", result_path),
         ("RUN_MANIFEST", manifest_path),
@@ -161,8 +163,197 @@ def result_to_payload(result: ReconciliationResult) -> dict[str, Any]:
     }
 
 
-def load_run_result(run_id: str) -> dict[str, Any]:
-    return read_json(run_directory(run_id) / "result.json")
+def result_from_payload(payload: dict[str, Any]) -> ReconciliationResult:
+    """Restore typed core records from a trusted run-scoped JSON snapshot."""
+
+    def lineage(value: dict[str, Any] | None) -> SourceLineage | None:
+        return SourceLineage(**value) if value else None
+
+    def evidence(value: dict[str, Any]) -> MatchEvidence:
+        return MatchEvidence(
+            rule_id=value["rule_id"],
+            rule_version=value["rule_version"],
+            reason_codes=tuple(value["reason_codes"]),
+            explanation_vi=value["explanation_vi"],
+            reference_hits=tuple(value.get("reference_hits", ())),
+            amount_delta_minor=value.get("amount_delta_minor"),
+            date_delta_days=value.get("date_delta_days"),
+            score=value.get("score"),
+            features=value.get("features", {}),
+        )
+
+    orders = tuple(
+        Order(
+            order_id=item["order_id"],
+            ordered_at=date.fromisoformat(item["ordered_at"]),
+            expected_amount_minor=item["expected_amount_minor"],
+            currency=Currency(item["currency"]),
+            order_status=OrderStatus(item["order_status"]),
+            external_ref=item.get("external_ref"),
+            customer_id=item.get("customer_id"),
+            customer_name=item.get("customer_name"),
+            payment_channel=item.get("payment_channel"),
+            batch_ref=item.get("batch_ref"),
+            description=item.get("description"),
+            lineage=lineage(item.get("lineage")),
+        )
+        for item in payload["orders"]
+    )
+    banks = tuple(
+        BankTransaction(
+            bank_txn_id=item["bank_txn_id"],
+            txn_date=date.fromisoformat(item["txn_date"]),
+            posted_amount_minor=item["posted_amount_minor"],
+            direction=Direction(item["direction"]),
+            amount_basis=AmountBasis(item["amount_basis"]),
+            currency=Currency(item["currency"]),
+            txn_ref=item.get("txn_ref"),
+            value_date=date.fromisoformat(item["value_date"]) if item.get("value_date") else None,
+            description=item.get("description"),
+            sender_name=item.get("sender_name"),
+            channel=item.get("channel"),
+            batch_ref=item.get("batch_ref"),
+            declared_fee_minor=item.get("declared_fee_minor"),
+            lineage=lineage(item.get("lineage")),
+        )
+        for item in payload["bank_transactions"]
+    )
+    groups = tuple(
+        MatchGroup(
+            group_id=item["group_id"],
+            group_type=GroupType(item["group_type"]),
+            order_ids=tuple(item["order_ids"]),
+            bank_txn_ids=tuple(item["bank_txn_ids"]),
+            link_status=LinkStatus(item["link_status"]),
+            review_status=ReviewStatus(item["review_status"]),
+            payment_statuses={key: PaymentStatus(value) for key, value in item["payment_statuses"].items()},
+            evidence=evidence(item["evidence"]),
+        )
+        for item in payload["groups"]
+    )
+    allocations = tuple(
+        AllocationEdge(
+            edge_id=item["edge_id"],
+            group_id=item["group_id"],
+            order_id=item["order_id"],
+            bank_txn_id=item["bank_txn_id"],
+            allocated_cash_minor=item["allocated_cash_minor"],
+            currency=Currency(item["currency"]),
+        )
+        for item in payload["allocations"]
+    )
+    adjustments = tuple(VerifiedAdjustment(**item) for item in payload["adjustments"])
+    candidates = tuple(
+        Candidate(
+            candidate_id=item["candidate_id"],
+            order_ids=tuple(item["order_ids"]),
+            bank_txn_ids=tuple(item["bank_txn_ids"]),
+            group_type=GroupType(item["group_type"]),
+            evidence=evidence(item["evidence"]),
+            competing_candidate_ids=tuple(item.get("competing_candidate_ids", ())),
+        )
+        for item in payload["candidates"]
+    )
+    exceptions = tuple(
+        ExceptionCase(
+            exception_id=item["exception_id"],
+            reason_codes=tuple(item["reason_codes"]),
+            order_ids=tuple(item.get("order_ids", ())),
+            bank_txn_ids=tuple(item.get("bank_txn_ids", ())),
+            risk_amount_minor=item.get("risk_amount_minor", 0),
+        )
+        for item in payload["exceptions"]
+    )
+    conservation_payload = payload["conservation"]
+    conservation = ConservationReport(
+        bank_allocated=conservation_payload["bank_allocated"],
+        bank_unapplied=conservation_payload["bank_unapplied"],
+        order_allocated=conservation_payload["order_allocated"],
+        order_adjusted=conservation_payload["order_adjusted"],
+        order_outstanding=conservation_payload["order_outstanding"],
+        violations=tuple(conservation_payload["violations"]),
+    )
+    return ReconciliationResult(
+        orders=orders,
+        bank_transactions=banks,
+        groups=groups,
+        allocations=allocations,
+        adjustments=adjustments,
+        candidates=candidates,
+        exceptions=exceptions,
+        payment_statuses={key: PaymentStatus(value) for key, value in payload["payment_statuses"].items()},
+        bank_unapplied_minor=payload["bank_unapplied_minor"],
+        order_outstanding_minor=payload["order_outstanding_minor"],
+        kpis=payload["kpis"],
+        layer_counts=payload["layer_counts"],
+        conservation=conservation,
+        semantic_checksum=payload["semantic_checksum"],
+    )
+
+
+def effective_result_path(run_id: str, revision: int) -> Path:
+    """Return the immutable result artifact path for one revision, including legacy revision zero."""
+    if revision == 0:
+        return run_directory(run_id) / "result.json"
+    return run_directory(run_id) / "revisions" / str(revision) / "result.json"
+
+
+def write_effective_result(run_id: str, revision: int, result: ReconciliationResult) -> tuple[Path, dict[str, Any]]:
+    """Atomically write an immutable revision payload before it can be published in PostgreSQL."""
+    payload = result_to_payload(result)
+    path = effective_result_path(run_id, revision)
+    write_json(path, payload)
+    return path, payload
+
+
+def load_run_result(run_id: str, revision: int = 0) -> dict[str, Any]:
+    return read_json(effective_result_path(run_id, revision))
+
+
+def persist_effective_records(
+    db: Session,
+    run_id: str,
+    revision: int,
+    result: ReconciliationResult,
+) -> None:
+    """Persist group, cash-edge, and adjustment snapshots for one immutable revision."""
+    for group in result.groups:
+        db.add(
+            MatchGroupRecord(
+                run_id=run_id,
+                revision=revision,
+                group_id=group.group_id,
+                group_type=group.group_type.value,
+                link_status=group.link_status.value,
+                review_status=group.review_status.value,
+                evidence=to_jsonable(group),
+            )
+        )
+    for edge in result.allocations:
+        db.add(
+            AllocationEdgeRecord(
+                run_id=run_id,
+                revision=revision,
+                edge_id=edge.edge_id,
+                group_id=edge.group_id,
+                order_id=edge.order_id,
+                bank_txn_id=edge.bank_txn_id,
+                allocated_cash_minor=edge.allocated_cash_minor,
+                currency=edge.currency.value,
+            )
+        )
+    for adjustment in result.adjustments:
+        db.add(
+            VerifiedAdjustmentRecord(
+                run_id=run_id,
+                revision=revision,
+                adjustment_id=adjustment.adjustment_id,
+                order_id=adjustment.order_id,
+                amount_minor=adjustment.amount_minor,
+                adjustment_type=adjustment.adjustment_type,
+                evidence_reference=adjustment.evidence_reference,
+            )
+        )
 
 
 def paginate(items: list[Any], page: int, page_size: int) -> dict[str, Any]:

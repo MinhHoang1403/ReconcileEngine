@@ -10,5 +10,6 @@ def test_required_operational_tables_are_registered() -> None:
         "review_actions",
         "match_groups",
         "allocation_edges",
+        "verified_adjustments",
         "artifact_manifest",
     } <= set(Base.metadata.tables)

@@ -34,9 +34,9 @@ def _run_or_404(db: Session, run_id: str) -> ReconciliationRun:
     return run
 
 
-def _result_or_404(run_id: str) -> dict[str, Any]:
+def _result_or_404(run_id: str, revision: int) -> dict[str, Any]:
     try:
-        return load_run_result(run_id)
+        return load_run_result(run_id, revision)
     except FileNotFoundError as exc:
         raise HTTPException(
             status_code=404,
@@ -90,7 +90,7 @@ def get_run(run_id: str, db: Session = Depends(get_db)) -> dict:
 @router.get("/{run_id}/dashboard", response_model=DashboardResponse)
 def get_dashboard(run_id: str, db: Session = Depends(get_db)) -> dict:
     run = _run_or_404(db, run_id)
-    result = _result_or_404(run_id)
+    result = _result_or_404(run_id, run.current_revision)
     return {
         "run_id": run.id,
         "effective_revision": run.current_revision,
@@ -109,8 +109,8 @@ def get_groups(
     link_status: str | None = None,
     db: Session = Depends(get_db),
 ) -> dict:
-    _run_or_404(db, run_id)
-    groups = _result_or_404(run_id)["groups"]
+    run = _run_or_404(db, run_id)
+    groups = _result_or_404(run_id, run.current_revision)["groups"]
     if link_status:
         groups = [item for item in groups if item["link_status"] == link_status]
     return paginate(groups, page, page_size)
@@ -119,7 +119,7 @@ def get_groups(
 @router.get("/{run_id}/groups/{group_id}")
 def get_group(run_id: str, group_id: str, db: Session = Depends(get_db)) -> dict:
     run = _run_or_404(db, run_id)
-    result = _result_or_404(run_id)
+    result = _result_or_404(run_id, run.current_revision)
     session = db.get(UploadSession, run.upload_session_id)
     group = extend_group_detail(result, session, group_id) if session else None
     if group is None:
@@ -130,7 +130,16 @@ def get_group(run_id: str, group_id: str, db: Session = Depends(get_db)) -> dict
 def _entity_detail_or_404(db: Session, run_id: str, entity_type: str, entity_id: str) -> dict[str, Any]:
     run = _run_or_404(db, run_id)
     session = db.get(UploadSession, run.upload_session_id)
-    detail = entity_detail(_result_or_404(run_id), session, entity_type, entity_id) if session else None
+    detail = (
+        entity_detail(
+            _result_or_404(run_id, run.current_revision),
+            session,
+            entity_type,
+            entity_id,
+        )
+        if session
+        else None
+    )
     if detail is None:
         raise HTTPException(
             status_code=404,
@@ -161,8 +170,8 @@ def get_orders(
     page_size: int = Query(50, ge=1, le=200),
     db: Session = Depends(get_db),
 ) -> dict:
-    _run_or_404(db, run_id)
-    result = _result_or_404(run_id)
+    run = _run_or_404(db, run_id)
+    result = _result_or_404(run_id, run.current_revision)
     allocated: dict[str, int] = {}
     for edge in result["allocations"]:
         allocated[edge["order_id"]] = allocated.get(edge["order_id"], 0) + edge["allocated_cash_minor"]
@@ -185,8 +194,8 @@ def get_bank_transactions(
     page_size: int = Query(50, ge=1, le=200),
     db: Session = Depends(get_db),
 ) -> dict:
-    _run_or_404(db, run_id)
-    result = _result_or_404(run_id)
+    run = _run_or_404(db, run_id)
+    result = _result_or_404(run_id, run.current_revision)
     allocated: dict[str, int] = {}
     for edge in result["allocations"]:
         allocated[edge["bank_txn_id"]] = allocated.get(edge["bank_txn_id"], 0) + edge["allocated_cash_minor"]
@@ -208,8 +217,12 @@ def get_exceptions(
     page_size: int = Query(50, ge=1, le=200),
     db: Session = Depends(get_db),
 ) -> dict:
-    _run_or_404(db, run_id)
-    return paginate(_result_or_404(run_id)["exceptions"], page, page_size)
+    run = _run_or_404(db, run_id)
+    return paginate(
+        _result_or_404(run_id, run.current_revision)["exceptions"],
+        page,
+        page_size,
+    )
 
 
 @router.get("/{run_id}/exports")
@@ -219,7 +232,7 @@ def export_run(
     db: Session = Depends(get_db),
 ) -> FileResponse:
     run = _run_or_404(db, run_id)
-    result = _result_or_404(run_id)
+    result = _result_or_404(run_id, run.current_revision)
     session = db.get(UploadSession, run.upload_session_id)
     path = create_excel_export(
         run_id,

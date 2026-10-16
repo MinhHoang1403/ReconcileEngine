@@ -8,7 +8,7 @@ Ngày kiểm tra: 2026-10-15. Môi trường: Windows/PowerShell, Docker Engine 
 |---|---|---|
 | Python lint | `uv run ruff check .` | Pass |
 | Python format | `uv run ruff format --check .` | Pass |
-| Python tests | `uv run pytest -q` | 83 passed; một deprecation warning từ FastAPI TestClient |
+| Python tests | `uv run pytest -q` | 89 passed; một deprecation warning từ FastAPI TestClient |
 | Golden | `uv run pytest tests/golden -q` | 26 assertions passed, phủ đúng 22 fixtures F01–F18 và F21–F24 |
 | Property | `uv run pytest tests/property -q` | 4 passed; các bất biến bảo toàn tiền đạt |
 | VND/CSV/XLSX/API | `uv run pytest tests/unit/test_money.py tests/integration/test_ingestion.py tests/api/test_workflow.py -q` | 36 passed |
@@ -17,7 +17,15 @@ Ngày kiểm tra: 2026-10-15. Môi trường: Windows/PowerShell, Docker Engine 
 | Frontend build | `npm run build` | Pass; Plotly basic bundle có cảnh báo chunk lớn, không phải lỗi build |
 | Compose | `docker compose config --quiet` | Exit 0 |
 | Images | `docker compose up --build -d` | Backend và frontend build sạch, ba services healthy |
-| Migration | `docker compose exec -T backend uv run alembic current` | `20261015_02 (head)` |
+| Migration | `docker compose exec -T backend uv run alembic current` | `20261015_03 (head)` |
+
+## Review foundation và transaction safety
+
+Ngày 2026-10-16, migration `20261015_03` được áp dụng trên PostgreSQL volume đang có dữ liệu. Trước và sau migration vẫn đọc được 45 upload sessions, 40 runs và 40 base revisions; một run cũ mở lại qua API thành công. Regression tại checkpoint này: `uv run ruff check .` pass và `uv run pytest -q` đạt 89 tests.
+
+Acceptance PostgreSQL dùng run synthetic `d63e09ea-4508-4ac5-a36a-fd1ad5c72e75`. Approve nhóm N:1 `CAND-974f668fcf3ccae4` tạo revision 1, hai edges tổng 500.000 VND, nâng confirmed cash từ 66.431.000 lên 66.931.000 VND và conservation vẫn hợp lệ. Retry cùng idempotency key trả lại đúng action cũ; request revision 0 với key mới trả HTTP 409 `STALE_REVISION`. PostgreSQL có đúng một review action, hai run revisions và tổng allocation của `TXN00007` tại revision 1 đúng 500.000 VND.
+
+Kiểm thử rollback gọi approve nhóm M:N không được hỗ trợ ở revision 1: API trả 409, `current_revision` vẫn là 1, số review actions vẫn là 1, không có row revision 2 và không có artifact revision 2. Unit test ép lỗi commit cũng xác nhận rollback về revision 0 và xóa result artifact chưa được công bố.
 
 ## Quy tắc VND có phần thập phân
 
