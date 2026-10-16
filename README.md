@@ -103,3 +103,4 @@ Hai file JSON trong `reports/` là runtime evidence theo máy và không đượ
 - `docs/DEPLOYMENT.md`: cấu hình production, migration one-shot, Linux/HTTPS, backup và restore drill độc lập.
 - `docs/EVALUATION_REPORT.md`: protocol, Precision/Recall/F1, ablation, benchmark và giới hạn.
 - `docs/QA_REPORT.md`: lệnh và bằng chứng test/Docker/browser/persistence đã chạy thực tế.
+- `docs/ACCEPTANCE_REPORT.md`: kết luận Checkpoint A–F, clean-clone, backup/restore, CI và giới hạn bàn giao.
