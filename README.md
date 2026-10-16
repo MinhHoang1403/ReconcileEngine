@@ -86,6 +86,16 @@ uv run python scripts/run_evaluation.py --orders 1000 --seed 20261016 --output r
 
 Mở `notebooks/reconciliation_research.ipynb` để xem EDA, Waterfall L1–L4, conservation, holdout metrics, ablation và hard-profile benchmark. Ground truth chỉ được evaluator đọc sau khi engine chạy. Kết quả, giới hạn và cách diễn giải chỉ số nằm trong `docs/EVALUATION_REPORT.md`.
 
+Với Docker stack đang healthy, có thể chạy acceptance PostgreSQL và benchmark tình huống:
+
+```powershell
+uv run python scripts/qa_concurrency.py --output reports/qa_concurrency.json
+uv run python scripts/run_qa_benchmark.py --repeats 25 --output reports/qa_benchmark.json
+uv run python scripts/browser_smoke.py --width 390 --height 844
+```
+
+Hai file JSON trong `reports/` là runtime evidence theo máy và không được commit; kết quả kiểm chứng đã được ghi tại `docs/QA_REPORT.md`.
+
 ## Tài liệu vận hành và nghiệm thu
 
 - `docs/API_CONTRACT.md`: endpoints, DTO, mã lỗi, pagination và an toàn upload/export.

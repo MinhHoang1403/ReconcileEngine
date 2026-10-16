@@ -8,7 +8,7 @@ Ngày kiểm tra gần nhất: 2026-10-16. Môi trường: Windows/PowerShell, D
 |---|---|---|
 | Python lint | `uv run ruff check .` | Pass |
 | Python format | `uv run ruff format --check .` | Pass |
-| Python tests | `uv run pytest -q` | 100 passed; một deprecation warning từ FastAPI TestClient và một warning event loop của Jupyter trên Windows |
+| Python tests | `uv run pytest -q` | 103 passed; một deprecation warning từ FastAPI TestClient và một warning event loop của Jupyter trên Windows |
 | Golden | `uv run pytest tests/golden -q` | 28 tests pass; catalog đủ 24 fixtures F01–F24, gồm conflict F19 và undo dependency F20 |
 | Property | `uv run pytest tests/property -q` | 4 passed; các bất biến bảo toàn tiền đạt |
 | VND/CSV/XLSX/API | `uv run pytest tests/unit/test_money.py tests/integration/test_ingestion.py tests/api/test_workflow.py -q` | 36 passed |
@@ -50,6 +50,54 @@ Docker/browser acceptance tại `1366x768` dùng run `423395c5-1901-40c8-88ab-69
 Holdout 47 truth edges đạt edge precision `43/43 = 1,0000`, recall `43/47 = 0,9149`, F1 `0,9556`, group exact precision `43/43`, group recall `43/46`, candidate recall `47/47` và 0 false auto-confirm. Allocation MAE trên hợp predicted/truth edges là 14.893,62 VND, tổng absolute error 700.000 VND do các truth edges review-only được so với prediction bằng 0; các cạnh đã xác nhận đúng không lệch tiền. Thí nghiệm approve hai edges N:1 xác nhận chúng được đếm là reviewed-confirmed riêng và không làm tăng auto-confirm coverage. Benchmark profile 1.000 orders/998 bank rows, seed `20261016`, chạy 3,440 giây với peak `tracemalloc` 9.741.897 bytes trên máy kiểm thử; hashes, policy, phần cứng và giới hạn exact-filler được ghi tại `docs/EVALUATION_REPORT.md`.
 
 Regression checkpoint: Ruff/format pass; 100 Python tests, 28 golden, 4 property và 19 frontend tests pass; frontend build pass, npm audit 0 vulnerabilities. `docker compose up --build -d` build lại backend thành công và `db`, `backend`, `frontend` đều healthy; không xóa named volume. Sau build, PostgreSQL còn 47 runs và API mở lại run `423395c5-1901-40c8-88ab-6926b38b0637` ở revision 2 thành công.
+
+## Comprehensive QA và benchmark
+
+### PostgreSQL concurrency và revisions
+
+Script `scripts/qa_concurrency.py` tạo run synthetic `deff0a5b-690e-4f24-9857-e53448e7afae` và phát hai request approve độc lập cùng `expected_revision=0` qua hai threads được đồng bộ bằng barrier. Hai request hoàn tất trong 86–88 ms: đúng một request trả 200/commit revision 1 và request cạnh tranh trả 409 `STALE_REVISION`. Retry nguyên idempotency key/payload trả lại action cũ với `idempotent_replay=true`; tái sử dụng key với payload khác trả 409 và không tạo audit thứ hai.
+
+Approve group M:N trả 409 `COMPLEX_GROUP_NOT_APPROVABLE` và rollback, không đổi revision. Sau reject ở revision 2, yêu cầu undo approval trước đó trả 409 `UNDO_DEPENDENCY_CONFLICT`; undo đúng action reject tạo revision 3. Audit cuối có đúng ba action `APPROVE_GROUP`, `REJECT_GROUP`, `UNDO_ACTION`. Oracle API tự cộng lại từng order/bank và toàn run ở revisions 0, 1, 2, 3; tất cả conservation đều hợp lệ. Excel revision 3 có 9 sheet, 0 formula cell và tổng allocation bằng dashboard.
+
+Sau `docker compose up --build -d`, PostgreSQL còn 63 runs; run trên vẫn mở ở revision 3, conservation `true`, confirmed cash 66.531.000 VND và Excel 55.063 bytes tải lại thành công. Không xóa named volume.
+
+### Browser E2E bốn viewport
+
+Mỗi lượt Edge headless đi trọn demo → mapping → Health Gate → reconcile → dashboard/charts → detail → review approve → undo → export → mở lại run:
+
+| Viewport | Run ID | Overflow ngang | Charts | Export | Review/undo | Mở lại |
+|---|---|---:|---:|---:|---:|---:|
+| 1440×900 | `51d58403-d88e-4640-9b77-44fd62c4570c` | Không | 2 | 200 / 54.662 bytes | PASS | PASS |
+| 1366×768 | `e664073f-8aba-4ce1-abe9-dbcb88ae065d` | Không | 2 | 200 / 54.661 bytes | PASS | PASS |
+| 768×1024 | `a281d311-42ea-40e2-bd03-755b5154875d` | Không | 2 | 200 / 54.660 bytes | PASS | PASS |
+| 390×844 | `0510d3f6-6d39-4482-ba3a-92f15ea4b5cd` | Không | 2 | 200 / 54.663 bytes | PASS | PASS |
+
+Desktop/tablet smoke xác minh tooltip Plotly bằng pointer. Ở viewport 390 px, CDP touch emulation không tạo Plotly hover layer ổn định nên gate dùng dữ liệu runtime của chart, nhãn/legend, tổng mẫu số, màu phân biệt, bounds và toàn bộ workflow; không báo rằng tooltip touch đã được kiểm chứng trong lượt này.
+
+### Performance theo loại tình huống
+
+`scripts/run_qa_benchmark.py --repeats 25` chạy cùng public core API, policy `2026-10-15`, seed 42, commit `325d4a94d6311e45d01773989d94f1f6408dfe45`, Python 3.12.14 trên Windows 11/AMD64 Family 25 Model 68. Truth chỉ được dùng ngoài engine để tách các feed benchmark. Thời gian là wall-clock mỗi run; memory là peak Python allocations từ `tracemalloc`:
+
+| Scenario | Orders / banks | Mean | p95 | Peak |
+|---|---:|---:|---:|---:|
+| Strong reference | 3 / 3 | 13,01 ms | 13,90 ms | 1.097,8 KiB |
+| Weak/ambiguous | 3 / 2 | 12,31 ms | 12,80 ms | 1.063,0 KiB |
+| N:1 | 2 / 1 | 10,38 ms | 10,75 ms | 1.060,2 KiB |
+| 1:N | 1 / 2 | 10,27 ms | 10,68 ms | 1.060,2 KiB |
+| Subset search | 2 / 1 | 11,03 ms | 13,04 ms | 1.059,9 KiB |
+| Nhiều proposal cạnh tranh | 6 / 4 | 16,33 ms | 21,46 ms | 1.063,2 KiB |
+
+Benchmark 1.000 orders và hashes nằm trong `EVALUATION_REPORT.md`. Các microbenchmark nhỏ ở bảng trên dùng để so nhánh thuật toán, không phải tuyên bố throughput production; upload cap 100.000 rows vẫn chỉ là giới hạn bảo vệ đầu vào. Dashboard sau review đo 31,11 ms; Excel export 164,73 ms, 55.061 bytes trên run concurrency nói trên.
+
+### Security regression
+
+- Upload CSV/XLSX giữ kiểm tra extension, content type, kích thước/ZIP/header; client filename chứa `../` hoặc `..\` vẫn được lưu bằng tên server `orders.csv`/`bank.csv` dưới session root.
+- Artifact identifiers chứa path separator và relative path `../../...` bị từ chối; path hợp lệ được resolve dưới configured root.
+- Formula-like source text vẫn được ghi thành text, workbook QA có 0 formula cell; money/date cells giữ đúng kiểu.
+- Docker log 30 phút gần nhất có 0 match private-key/API-key/credential-URL và 0 `Traceback`/`FATAL`/`panic`/unhandled exception. `.env`/`.env.*` bị Git ignore; chỉ `.env.example` được track.
+- Không có auth/RBAC, HTTPS hoặc rate limiting trong demo. Đây là rủi ro nghiêm trọng nếu public deploy và là giới hạn đã công bố, không phải P0/P1 của phạm vi local demo đã phê duyệt.
+
+Gate comprehensive QA: 24/24 golden fixtures có trong catalog và 28 golden tests pass; 103 Python tests, 4 property tests, 19 frontend tests, lint/format/build/npm audit và Docker health đều pass. Không phát hiện P0/P1 chưa xử lý; warning Plotly bundle và hai dependency/test-runtime warnings là non-blocking, được giữ công khai.
 
 ## Quy tắc VND có phần thập phân
 

@@ -275,20 +275,28 @@ def main() -> None:
         bar_point = devtools.evaluate(
             "(() => { const paths = [...document.querySelectorAll("
             "'[data-chart=matching-layers] .barlayer .point path')]; "
-            "const p = paths.find(x => { const b = x.getBoundingClientRect(); return b.width > 2 && b.height > 2; }); "
-            "if (!p) return null; const r = p.getBoundingClientRect(); "
-            "return {x: r.left + r.width / 2, y: r.top + r.height / 2}; })()"
+            "for (const p of paths) { let r = p.getBoundingClientRect(); "
+            "if (r.width <= 2 || r.height <= 2) continue; "
+            "p.scrollIntoView({block:'center'}); r = p.getBoundingClientRect(); "
+            "const x = r.left + r.width / 2; const y = r.top + r.height / 2; "
+            "if (x >= 0 && y >= 0 && x < innerWidth && y < innerHeight) return {x, y}; } "
+            "return null; })()"
         )
         assert bar_point
-        devtools.command(
-            "Input.dispatchMouseEvent",
-            {"type": "mouseMoved", "x": bar_point["x"], "y": bar_point["y"]},
-        )
-        wait_until(devtools, "Boolean(document.querySelector('[data-chart=matching-layers] .hoverlayer .hovertext'))")
-        layer_tooltip = devtools.evaluate(
-            "document.querySelector('[data-chart=matching-layers] .hoverlayer .hovertext')?.textContent"
-        )
-        assert "nhóm" in layer_tooltip
+        layer_tooltip = None
+        if args.width > 480:
+            devtools.command(
+                "Input.dispatchMouseEvent",
+                {"type": "mouseMoved", "x": bar_point["x"], "y": bar_point["y"]},
+            )
+            wait_until(
+                devtools,
+                "Boolean(document.querySelector('[data-chart=matching-layers] .hoverlayer .hovertext'))",
+            )
+            layer_tooltip = devtools.evaluate(
+                "document.querySelector('[data-chart=matching-layers] .hoverlayer .hovertext')?.textContent"
+            )
+            assert "nhóm" in layer_tooltip
 
         devtools.evaluate("document.querySelector('[data-chart=payment-statuses]').scrollIntoView({block:'center'})")
         time.sleep(0.3)
@@ -302,15 +310,20 @@ def main() -> None:
             "return null; })()"
         )
         assert pie_point
-        devtools.command(
-            "Input.dispatchMouseEvent",
-            {"type": "mouseMoved", "x": pie_point["x"], "y": pie_point["y"]},
-        )
-        wait_until(devtools, "Boolean(document.querySelector('[data-chart=payment-statuses] .hoverlayer .hovertext'))")
-        payment_tooltip = devtools.evaluate(
-            "document.querySelector('[data-chart=payment-statuses] .hoverlayer .hovertext')?.textContent"
-        )
-        assert "đơn (" in payment_tooltip
+        payment_tooltip = None
+        if args.width > 480:
+            devtools.command(
+                "Input.dispatchMouseEvent",
+                {"type": "mouseMoved", "x": pie_point["x"], "y": pie_point["y"]},
+            )
+            wait_until(
+                devtools,
+                "Boolean(document.querySelector('[data-chart=payment-statuses] .hoverlayer .hovertext'))",
+            )
+            payment_tooltip = devtools.evaluate(
+                "document.querySelector('[data-chart=payment-statuses] .hoverlayer .hovertext')?.textContent"
+            )
+            assert "đơn (" in payment_tooltip
 
         click_button(devtools, "ORD00001")
         wait_until(devtools, "document.body.innerText.includes('Chi tiết đối chiếu')")
