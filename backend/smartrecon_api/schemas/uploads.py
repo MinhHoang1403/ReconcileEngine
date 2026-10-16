@@ -17,6 +17,7 @@ class MappingRequest(BaseModel):
     thousand_separator: str | None = ","
     order_defaults: dict[str, str] = Field(default_factory=lambda: {"order_status": "ELIGIBLE"})
     bank_defaults: dict[str, str] = Field(default_factory=dict)
+    confirmed_structure: bool = False
 
 
 class ExclusionRequest(BaseModel):
@@ -46,6 +47,7 @@ class InspectionResponse(BaseModel):
     dataset_profile: str
     raw_eda: dict[str, RawEdaResponse]
     suggested_mapping: dict[str, dict[str, str]]
+    detected_structure: dict[str, Any]
 
 
 class HealthResponse(BaseModel):

@@ -1,15 +1,15 @@
-"""Safe CSV/XLSX readers that preserve source values and file lineage."""
+"""Safe CSV/XLSX readers that preserve source values and exact row lineage."""
 
 from __future__ import annotations
 
-import csv
 import hashlib
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 
 import pandas as pd
-from openpyxl import load_workbook
+
+from smartrecon.ingest.structure import DetectedStructure, csv_rows, detect_structure, xlsx_rows
 
 MAX_FILE_BYTES = 25 * 1024 * 1024
 MAX_ROWS = 100_000
@@ -31,6 +31,8 @@ class RawTable:
     file_sha256: str
     sheet_name: str | None
     frame: pd.DataFrame
+    structure: DetectedStructure
+    source_row_numbers: tuple[int, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -70,29 +72,49 @@ def _validate_shape(frame: pd.DataFrame, source_name: str) -> None:
         raise InputFileError(f"Header bị trùng: {', '.join(duplicates)}")
 
 
-def _validate_headers(headers: list[object]) -> None:
-    """Reject blank or duplicate source headers before Pandas can rename them."""
+def _validated_headers(headers: list[object]) -> list[str]:
+    """Reject duplicate headers and label blank positions without assigning meaning."""
     normalized = [str(value).strip() if value is not None else "" for value in headers]
-    if not normalized or any(not value for value in normalized):
-        raise InputFileError("Header không được để trống")
-    duplicates = sorted({value for value in normalized if normalized.count(value) > 1})
+    if not normalized or not any(normalized):
+        raise InputFileError("Header không có tên cột")
+    duplicates = sorted({value for value in normalized if value and normalized.count(value) > 1})
     if duplicates:
         raise InputFileError(f"Header bị trùng: {', '.join(duplicates)}")
+    return [value or f"Cột chưa đặt tên {index + 1}" for index, value in enumerate(normalized)]
 
 
-def _read_csv(path: Path) -> pd.DataFrame:
-    head = path.read_bytes()[:4096]
-    if b"\x00" in head:
-        raise InputFileError("CSV chứa byte NUL hoặc content không phải text")
-    last_error: UnicodeDecodeError | None = None
-    for encoding in ("utf-8-sig", "utf-8"):
-        try:
-            with path.open("r", encoding=encoding, newline="") as handle:
-                _validate_headers(next(csv.reader(handle), []))
-            return pd.read_csv(path, dtype="string", keep_default_na=False, encoding=encoding)
-        except UnicodeDecodeError as exc:
-            last_error = exc
-    raise InputFileError("CSV phải dùng UTF-8 hoặc UTF-8-SIG") from last_error
+def _frame_from_structure(rows: list[list[object]], structure: DetectedStructure) -> pd.DataFrame:
+    headers = _validated_headers(list(structure.selected.columns))
+    raw_rows = rows[structure.data_start_row_number - 1 :]
+    populated = [row for row in raw_rows if any(value is not None and str(value).strip() for value in row)]
+    width = len(headers)
+    matrix = [list(row[:width]) + [None] * max(0, width - len(row)) for row in populated]
+    return pd.DataFrame([row[:width] for row in matrix], columns=headers, dtype=object)
+
+
+def _read_csv(
+    path: Path,
+    *,
+    expected_feed: str | None,
+    delimiter: str | None,
+    header_row: int | None,
+    header_depth: int | None,
+) -> tuple[pd.DataFrame, DetectedStructure]:
+    try:
+        rows, selected_delimiter, encoding = csv_rows(path, delimiter)
+        structure = detect_structure(
+            {None: rows},
+            expected_feed=expected_feed,
+            delimiter=selected_delimiter,
+            encoding=encoding,
+            selected_header_row=header_row,
+            selected_header_depth=header_depth,
+        )
+    except (UnicodeDecodeError, UnicodeError) as exc:
+        raise InputFileError("CSV phải dùng UTF-8 hoặc UTF-8-SIG") from exc
+    except ValueError as exc:
+        raise InputFileError(str(exc)) from exc
+    return _frame_from_structure(rows, structure), structure
 
 
 def _validate_xlsx(path: Path) -> None:
@@ -109,45 +131,87 @@ def _validate_xlsx(path: Path) -> None:
             raise InputFileError("Workbook có macro không được hỗ trợ")
 
 
-def _read_xlsx(path: Path, sheet_name: str | None) -> tuple[pd.DataFrame, str]:
+def _read_xlsx(
+    path: Path,
+    sheet_name: str | None,
+    *,
+    expected_feed: str | None,
+    header_row: int | None,
+    header_depth: int | None,
+) -> tuple[pd.DataFrame, str, DetectedStructure]:
     _validate_xlsx(path)
-    excel = pd.ExcelFile(path, engine="openpyxl")
-    if len(excel.sheet_names) > MAX_SHEETS:
-        raise InputFileError(f"Workbook vượt giới hạn {MAX_SHEETS} sheets")
-    selected = sheet_name or (excel.sheet_names[0] if len(excel.sheet_names) == 1 else None)
-    if selected is None:
-        raise InputFileError("Workbook nhiều sheet cần chọn sheet rõ ràng")
-    if selected not in excel.sheet_names:
-        raise InputFileError(f"Không tìm thấy sheet: {selected}")
-    workbook = load_workbook(path, read_only=True, data_only=False, keep_links=False)
     try:
-        worksheet = workbook[selected]
-        header_row = next(worksheet.iter_rows(min_row=1, max_row=1, values_only=True), ())
-        _validate_headers(list(header_row))
-    finally:
-        workbook.close()
-    return (
-        pd.read_excel(path, sheet_name=selected, dtype="string", keep_default_na=False),
-        selected,
-    )
+        sheets = xlsx_rows(path)
+    except ValueError as exc:
+        raise InputFileError(str(exc)) from exc
+    if len(sheets) > MAX_SHEETS:
+        raise InputFileError(f"Workbook vượt giới hạn {MAX_SHEETS} sheets")
+    try:
+        structure = detect_structure(
+            sheets,
+            expected_feed=expected_feed,
+            selected_sheet=sheet_name,
+            selected_header_row=header_row,
+            selected_header_depth=header_depth,
+        )
+    except ValueError as exc:
+        raise InputFileError(str(exc)) from exc
+    selected = structure.selected.sheet_name
+    if selected is None or selected not in sheets:
+        raise InputFileError("Không tìm thấy sheet dữ liệu")
+    return _frame_from_structure(sheets[selected], structure), selected, structure
 
 
-def read_table(path: Path, *, sheet_name: str | None = None) -> RawTable:
-    """Read one source without type coercion that would discard leading zeros."""
+def read_table(
+    path: Path,
+    *,
+    sheet_name: str | None = None,
+    expected_feed: str | None = None,
+    delimiter: str | None = None,
+    header_row: int | None = None,
+    header_depth: int | None = None,
+) -> RawTable:
+    """Read one source while preserving IDs, exact source rows, and structure evidence."""
+    if header_row is not None and header_row < 1:
+        raise InputFileError("Số dòng header phải lớn hơn hoặc bằng 1")
+    if header_depth is not None and header_depth not in {1, 2}:
+        raise InputFileError("Độ sâu header chỉ hỗ trợ 1 hoặc 2 dòng")
+    if delimiter is not None and delimiter not in {",", ";", "\t", "|"}:
+        raise InputFileError("Dấu phân cách CSV không được hỗ trợ")
     suffix = _validate_path(path, {".csv", ".xlsx"})
     if suffix == ".csv":
         if sheet_name is not None:
             raise InputFileError("CSV không có sheet")
-        frame = _read_csv(path)
+        frame, structure = _read_csv(
+            path,
+            expected_feed=expected_feed,
+            delimiter=delimiter,
+            header_row=header_row,
+            header_depth=header_depth,
+        )
         selected_sheet = None
     else:
-        frame, selected_sheet = _read_xlsx(path, sheet_name)
+        frame, selected_sheet, structure = _read_xlsx(
+            path,
+            sheet_name,
+            expected_feed=expected_feed,
+            header_row=header_row,
+            header_depth=header_depth,
+        )
     frame.columns = [str(column).strip() for column in frame.columns]
     _validate_shape(frame, f"{path.name}{f'/{selected_sheet}' if selected_sheet else ''}")
     digest = file_sha256(path)
     sheet_token = selected_sheet or "csv"
     source_file_id = hashlib.sha256(f"{digest}:{sheet_token}".encode()).hexdigest()[:24]
-    return RawTable(source_file_id, path.name, digest, selected_sheet, frame)
+    return RawTable(
+        source_file_id=source_file_id,
+        original_filename=path.name,
+        file_sha256=digest,
+        sheet_name=selected_sheet,
+        frame=frame,
+        structure=structure,
+        source_row_numbers=structure.source_row_numbers,
+    )
 
 
 def read_source_bundle(
@@ -157,19 +221,55 @@ def read_source_bundle(
     workbook_path: Path | None = None,
     orders_sheet: str | None = None,
     bank_sheet: str | None = None,
+    orders_header_row: int | None = None,
+    bank_header_row: int | None = None,
+    orders_header_depth: int | None = None,
+    bank_header_depth: int | None = None,
+    orders_delimiter: str | None = None,
+    bank_delimiter: str | None = None,
 ) -> RawSourceBundle:
-    """Read either two independent files or two distinct workbook sheets."""
+    """Read two files or two workbook sheets with deterministic structure inspection."""
     separate = orders_path is not None or bank_path is not None
     workbook = workbook_path is not None
     if separate == workbook:
         raise InputFileError("Chọn đúng một chế độ: hai file hoặc một workbook")
     if workbook_path is not None:
-        if not orders_sheet or not bank_sheet or orders_sheet == bank_sheet:
+        if bool(orders_sheet) != bool(bank_sheet):
+            raise InputFileError("Cần chọn đủ cả hai sheet hoặc để hệ thống nhận diện")
+        if orders_sheet and orders_sheet == bank_sheet:
             raise InputFileError("Cần chọn hai sheet khác nhau cho orders và bank")
-        return RawSourceBundle(
-            orders=read_table(workbook_path, sheet_name=orders_sheet),
-            bank_transactions=read_table(workbook_path, sheet_name=bank_sheet),
+        orders = read_table(
+            workbook_path,
+            sheet_name=orders_sheet,
+            expected_feed="orders",
+            header_row=orders_header_row,
+            header_depth=orders_header_depth,
         )
+        bank = read_table(
+            workbook_path,
+            sheet_name=bank_sheet,
+            expected_feed="bank_transactions",
+            header_row=bank_header_row,
+            header_depth=bank_header_depth,
+        )
+        if orders.sheet_name == bank.sheet_name:
+            raise InputFileError("Không thể tự phân biệt hai feed; cần chọn hai sheet khác nhau")
+        return RawSourceBundle(orders=orders, bank_transactions=bank)
     if orders_path is None or bank_path is None:
         raise InputFileError("Cần đủ hai file orders và bank")
-    return RawSourceBundle(orders=read_table(orders_path), bank_transactions=read_table(bank_path))
+    return RawSourceBundle(
+        orders=read_table(
+            orders_path,
+            expected_feed="orders",
+            delimiter=orders_delimiter,
+            header_row=orders_header_row,
+            header_depth=orders_header_depth,
+        ),
+        bank_transactions=read_table(
+            bank_path,
+            expected_feed="bank_transactions",
+            delimiter=bank_delimiter,
+            header_row=bank_header_row,
+            header_depth=bank_header_depth,
+        ),
+    )

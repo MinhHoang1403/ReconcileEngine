@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import csv
 import shutil
 from dataclasses import asdict
 from pathlib import Path
@@ -10,7 +9,6 @@ from typing import Any
 from uuid import uuid4
 
 from fastapi import UploadFile
-from openpyxl import load_workbook
 from sqlalchemy.orm import Session
 
 from backend.smartrecon_api.db.models import ArtifactManifest, UploadSession
@@ -127,11 +125,13 @@ def _persist_inspection(
                 "name": raw.orders.original_filename,
                 "sha256": raw.orders.file_sha256,
                 "sheet": raw.orders.sheet_name,
+                "structure": to_jsonable(raw.orders.structure),
             },
             "bank": {
                 "name": raw.bank_transactions.original_filename,
                 "sha256": raw.bank_transactions.file_sha256,
                 "sheet": raw.bank_transactions.sheet_name,
+                "structure": to_jsonable(raw.bank_transactions.structure),
             },
         },
     }
@@ -167,6 +167,10 @@ def _persist_inspection(
             "order_columns": order_suggestions,
             "bank_columns": bank_suggestions,
         },
+        "detected_structure": {
+            "orders": to_jsonable(raw.orders.structure),
+            "bank_transactions": to_jsonable(raw.bank_transactions.structure),
+        },
     }
 
 
@@ -178,15 +182,28 @@ def mapping_from_request(request: MappingRequest | dict[str, Any]) -> MappingCon
 
 def load_raw_bundle(session: UploadSession) -> RawSourceBundle:
     paths = session.source_manifest["source_paths"]
+    files = session.source_manifest.get("files", {})
+    order_structure = files.get("orders", {}).get("structure", {}).get("selected", {})
+    bank_structure = files.get("bank", {}).get("structure", {}).get("selected", {})
     if paths["mode"] == "workbook":
         return read_source_bundle(
             workbook_path=resolve_artifact_path(paths["workbook"]),
-            orders_sheet=paths["orders_sheet"],
-            bank_sheet=paths["bank_sheet"],
+            orders_sheet=order_structure.get("sheet_name") or paths.get("orders_sheet"),
+            bank_sheet=bank_structure.get("sheet_name") or paths.get("bank_sheet"),
+            orders_header_row=order_structure.get("header_row_number"),
+            bank_header_row=bank_structure.get("header_row_number"),
+            orders_header_depth=order_structure.get("header_depth"),
+            bank_header_depth=bank_structure.get("header_depth"),
         )
     return read_source_bundle(
         orders_path=resolve_artifact_path(paths["orders"]),
         bank_path=resolve_artifact_path(paths["bank"]),
+        orders_header_row=order_structure.get("header_row_number"),
+        bank_header_row=bank_structure.get("header_row_number"),
+        orders_header_depth=order_structure.get("header_depth"),
+        bank_header_depth=bank_structure.get("header_depth"),
+        orders_delimiter=order_structure.get("delimiter"),
+        bank_delimiter=bank_structure.get("delimiter"),
     )
 
 
@@ -197,7 +214,7 @@ def read_source_rows(
     *,
     limit: int = 50,
 ) -> dict[int, dict[str, Any]]:
-    """Stream selected source rows without accepting a client-controlled artifact path."""
+    """Read selected rows through the same structure-aware reader used for normalization."""
     if feed not in {"orders", "bank_transactions"}:
         raise ValueError("Nguồn dữ liệu không hợp lệ")
     targets = sorted({number for number in row_numbers if number >= 2})
@@ -205,51 +222,26 @@ def read_source_rows(
         raise ValueError(f"Chỉ được đọc tối đa {limit} dòng nguồn mỗi yêu cầu")
     if not targets:
         return {}
-    paths = session.source_manifest["source_paths"]
-    path_key = "orders" if feed == "orders" else "bank"
-    relative = paths.get(path_key) or paths.get("workbook")
-    path = resolve_artifact_path(relative)
-    if path.suffix.lower() == ".csv":
-        return _stream_csv_rows(path, targets)
-    file_key = "orders" if feed == "orders" else "bank"
-    sheet_name = session.source_manifest.get("files", {}).get(file_key, {}).get("sheet")
-    return _stream_xlsx_rows(path, sheet_name, targets)
-
-
-def _stream_csv_rows(path: Path, targets: list[int]) -> dict[int, dict[str, Any]]:
-    found: dict[int, dict[str, Any]] = {}
-    with path.open("r", encoding="utf-8-sig", newline="") as handle:
-        reader = csv.DictReader(handle)
-        for row_number, row in enumerate(reader, start=2):
-            if row_number in targets:
-                found[row_number] = {str(key): value for key, value in row.items()}
-            if row_number >= targets[-1]:
-                break
-    return found
-
-
-def _stream_xlsx_rows(path: Path, sheet_name: str | None, targets: list[int]) -> dict[int, dict[str, Any]]:
-    workbook = load_workbook(path, read_only=True, data_only=True, keep_links=False)
-    try:
-        worksheet = workbook[sheet_name] if sheet_name else workbook.active
-        iterator = worksheet.iter_rows(values_only=True)
-        headers = [str(value or "") for value in next(iterator)]
-        found: dict[int, dict[str, Any]] = {}
-        for row_number, values in enumerate(iterator, start=2):
-            if row_number in targets:
-                found[row_number] = {
-                    header: "" if value is None else str(value) for header, value in zip(headers, values, strict=False)
-                }
-            if row_number >= targets[-1]:
-                break
-        return found
-    finally:
-        workbook.close()
+    raw = load_raw_bundle(session)
+    table = raw.orders if feed == "orders" else raw.bank_transactions
+    positions = {row_number: index for index, row_number in enumerate(table.source_row_numbers)}
+    return {
+        row_number: {
+            str(key): "" if value is None else str(value)
+            for key, value in table.frame.iloc[positions[row_number]].items()
+        }
+        for row_number in targets
+        if row_number in positions
+    }
 
 
 def confirm_mapping(db: Session, session: UploadSession, request: MappingRequest) -> dict[str, Any]:
     mapping = mapping_from_request(request)
     raw = load_raw_bundle(session)
+    if not mapping.confirmed_structure and any(
+        table.structure.status == "NEEDS_REVIEW" for table in (raw.orders, raw.bank_transactions)
+    ):
+        raise ValueError("Cấu trúc file có nhiều cách diễn giải; cần xác nhận sheet và hàng tiêu đề.")
     normalized = normalize_bundle(raw, mapping)
     report = build_health_report(normalized)
     standardized = summarize_standardized(
@@ -281,9 +273,12 @@ def normalize_session(session: UploadSession) -> tuple[NormalizedBundle, Any]:
 def apply_resolution(db: Session, session: UploadSession, request: ResolutionRequest) -> dict[str, Any]:
     raw = load_raw_bundle(session)
     normalized = normalize_bundle(raw, mapping_from_request(session.mapping_snapshot or {}))
-    row_limits = {"orders": len(raw.orders.frame) + 1, "bank_transactions": len(raw.bank_transactions.frame) + 1}
+    valid_rows = {
+        "orders": set(raw.orders.source_row_numbers),
+        "bank_transactions": set(raw.bank_transactions.source_row_numbers),
+    }
     for exclusion in request.exclusions:
-        if exclusion.source_row_number > row_limits[exclusion.feed]:
+        if exclusion.source_row_number not in valid_rows[exclusion.feed]:
             raise ValueError(f"Dòng {exclusion.source_row_number} không tồn tại trong nguồn {exclusion.feed}")
     exclusions = [Exclusion(**item.model_dump()) for item in request.exclusions]
     resolved, report = apply_exclusions(normalized, exclusions)
@@ -346,10 +341,11 @@ def _health_issue_details(
         rows: list[dict[str, Any]] = []
         for row_number in issue.source_rows[:50]:
             raw_values: dict[str, Any] = {}
-            if table is not None and 2 <= row_number <= len(table.frame) + 1:
+            if table is not None and row_number in table.source_row_numbers:
+                position = table.source_row_numbers.index(row_number)
                 raw_values = {
                     str(key): str(value) if value is not None else ""
-                    for key, value in table.frame.iloc[row_number - 2].items()
+                    for key, value in table.frame.iloc[position].items()
                 }
             normalized_values = canonical_by_row.get((issue.feed, row_number))
             rows.append(

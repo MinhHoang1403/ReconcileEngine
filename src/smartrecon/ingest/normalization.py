@@ -152,8 +152,8 @@ def normalize_bundle(raw: RawSourceBundle, mapping: MappingConfig) -> Normalized
     banks: list[BankTransaction] = []
     rejected: list[RejectedRow] = []
 
-    for offset, row in raw.orders.frame.iterrows():
-        row_number = int(offset) + 2
+    for position, (_, row) in enumerate(raw.orders.frame.iterrows()):
+        row_number = raw.orders.source_row_numbers[position]
         row_digest = _row_hash(row)
         try:
             order_id = normalize_identifier(row[mapping.order_columns["order_id"]])
@@ -198,8 +198,8 @@ def normalize_bundle(raw: RawSourceBundle, mapping: MappingConfig) -> Normalized
             )
             rejected.append(RejectedRow("orders", row_number, row_digest, "ORDER_PARSE_ERROR"))
 
-    for offset, row in raw.bank_transactions.frame.iterrows():
-        row_number = int(offset) + 2
+    for position, (_, row) in enumerate(raw.bank_transactions.frame.iterrows()):
+        row_number = raw.bank_transactions.source_row_numbers[position]
         row_digest = _row_hash(row)
         try:
             bank_id = normalize_identifier(row[mapping.bank_columns["bank_txn_id"]])

@@ -111,6 +111,7 @@ class MappingConfig:
     thousand_separator: str | None = ","
     order_defaults: dict[str, str] = field(default_factory=lambda: {"order_status": "ELIGIBLE"})
     bank_defaults: dict[str, str] = field(default_factory=dict)
+    confirmed_structure: bool = False
 
 
 def suggest_mapping(columns: list[str], canonical_fields: set[str]) -> dict[str, str]:

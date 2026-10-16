@@ -317,6 +317,10 @@ def _review_audit_rows(review_audit: list[dict[str, Any]]) -> list[dict[str, Any
 
 def _flatten_manifest(value: Any, prefix: str = "") -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
+    if isinstance(value, list) and any(isinstance(child, (dict, list)) for child in value):
+        for index, child in enumerate(value, start=1):
+            rows.extend(_flatten_manifest(child, f"{prefix}[{index}]"))
+        return rows
     if isinstance(value, dict):
         for key, child in value.items():
             path = f"{prefix}.{key}" if prefix else str(key)

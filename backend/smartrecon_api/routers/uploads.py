@@ -53,6 +53,12 @@ async def inspect_upload(
     workbook_file: Annotated[UploadFile | None, File()] = None,
     orders_sheet: Annotated[str | None, Form()] = None,
     bank_sheet: Annotated[str | None, Form()] = None,
+    orders_header_row: Annotated[int | None, Form()] = None,
+    bank_header_row: Annotated[int | None, Form()] = None,
+    orders_header_depth: Annotated[int | None, Form()] = None,
+    bank_header_depth: Annotated[int | None, Form()] = None,
+    orders_delimiter: Annotated[str | None, Form()] = None,
+    bank_delimiter: Annotated[str | None, Form()] = None,
     db: Session = Depends(get_db),
 ) -> dict:
     session_id = str(uuid4())
@@ -62,7 +68,15 @@ async def inspect_upload(
             if orders_file is not None or bank_file is not None:
                 raise ValueError("Không gửi workbook đồng thời với hai file riêng")
             path = await save_upload(workbook_file, directory, "workbook")
-            raw = read_source_bundle(workbook_path=path, orders_sheet=orders_sheet, bank_sheet=bank_sheet)
+            raw = read_source_bundle(
+                workbook_path=path,
+                orders_sheet=orders_sheet,
+                bank_sheet=bank_sheet,
+                orders_header_row=orders_header_row,
+                bank_header_row=bank_header_row,
+                orders_header_depth=orders_header_depth,
+                bank_header_depth=bank_header_depth,
+            )
             source_paths = {
                 "mode": "workbook",
                 "workbook": str(path),
@@ -74,7 +88,16 @@ async def inspect_upload(
                 raise ValueError("Cần đủ hai file orders và bank")
             orders_path = await save_upload(orders_file, directory, "orders")
             bank_path = await save_upload(bank_file, directory, "bank")
-            raw = read_source_bundle(orders_path=orders_path, bank_path=bank_path)
+            raw = read_source_bundle(
+                orders_path=orders_path,
+                bank_path=bank_path,
+                orders_header_row=orders_header_row,
+                bank_header_row=bank_header_row,
+                orders_header_depth=orders_header_depth,
+                bank_header_depth=bank_header_depth,
+                orders_delimiter=orders_delimiter,
+                bank_delimiter=bank_delimiter,
+            )
             source_paths = {"mode": "separate", "orders": str(orders_path), "bank": str(bank_path)}
         return create_upload_session(db, session_id, raw, source_paths)
     except (InputFileError, ValueError) as exc:
