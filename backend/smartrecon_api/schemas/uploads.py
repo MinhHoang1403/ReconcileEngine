@@ -25,6 +25,8 @@ class MappingRequest(BaseModel):
     bank_transformations: dict[str, dict[str, Any]] = Field(default_factory=dict)
     transformation_version: str = TRANSFORMATION_VERSION
     confirmed_ambiguities: tuple[str, ...] = ()
+    import_profile_id: str | None = None
+    import_profile_schema_version: str | None = None
 
 
 class ExclusionRequest(BaseModel):
@@ -56,6 +58,7 @@ class InspectionResponse(BaseModel):
     suggested_mapping: dict[str, dict[str, str]]
     mapping_suggestions: dict[str, Any]
     detected_structure: dict[str, Any]
+    import_profile: dict[str, Any]
 
 
 class HealthResponse(BaseModel):

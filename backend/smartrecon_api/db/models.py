@@ -32,6 +32,23 @@ class UploadSession(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+class ImportProfile(Base):
+    """User-confirmed import configuration bound to one exact two-feed schema."""
+
+    __tablename__ = "import_profiles"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    name: Mapped[str] = mapped_column(String(160), nullable=False)
+    schema_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False, unique=True, index=True)
+    schema_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    schema_snapshot: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    mapping_snapshot: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
 class ReconciliationRun(Base):
     """An immutable input/config reconciliation execution."""
 

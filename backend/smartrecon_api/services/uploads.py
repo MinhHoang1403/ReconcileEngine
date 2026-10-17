@@ -9,9 +9,10 @@ from typing import Any
 from uuid import uuid4
 
 from fastapi import UploadFile
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from backend.smartrecon_api.db.models import ArtifactManifest, UploadSession
+from backend.smartrecon_api.db.models import ArtifactManifest, ImportProfile, UploadSession
 from backend.smartrecon_api.schemas.uploads import MappingRequest, ResolutionRequest
 from backend.smartrecon_api.services.artifacts import (
     relative_artifact_path,
@@ -32,6 +33,7 @@ from smartrecon.ingest.mapping import (
     suggest_mapping,
 )
 from smartrecon.ingest.normalization import NormalizedBundle, normalize_bundle
+from smartrecon.ingest.profiles import SCHEMA_VERSION, recognize_profiles, schema_fingerprint, source_schema
 from smartrecon.ingest.readers import MAX_FILE_BYTES, RawSourceBundle, read_source_bundle
 
 ALLOWED_CONTENT_TYPES = {
@@ -104,19 +106,31 @@ def _persist_inspection(
     mapping: MappingConfig | None = None,
     dataset_profile: str = "uploaded",
 ) -> dict[str, Any]:
+    fingerprint = schema_fingerprint(raw)
+    matched_profile = db.scalar(
+        select(ImportProfile).where(
+            ImportProfile.schema_fingerprint == fingerprint,
+            ImportProfile.schema_version == SCHEMA_VERSION,
+        )
+    )
+    if not isinstance(matched_profile, ImportProfile):
+        matched_profile = None
+    effective_mapping = mapping
+    if effective_mapping is None and matched_profile is not None:
+        effective_mapping = mapping_from_request(matched_profile.mapping_snapshot)
     order_analysis = analyze_mapping(
         raw.orders.frame,
         ORDER_FIELDS,
         feed="orders",
         required_fields=ORDER_REQUIRED,
-        profile_mapping=mapping.order_columns if mapping else None,
+        profile_mapping=effective_mapping.order_columns if effective_mapping else None,
     )
     bank_analysis = analyze_mapping(
         raw.bank_transactions.frame,
         BANK_FIELDS,
         feed="bank_transactions",
         required_fields=BANK_REQUIRED,
-        profile_mapping=mapping.bank_columns if mapping else None,
+        profile_mapping=effective_mapping.bank_columns if effective_mapping else None,
     )
     order_suggestions = suggest_mapping(
         list(raw.orders.frame.columns),
@@ -128,11 +142,29 @@ def _persist_inspection(
         BANK_REQUIRED
         | {"currency", "txn_ref", "value_date", "description", "sender_name", "channel", "batch_ref", "declared_fee"},
     )
-    if mapping:
-        order_suggestions = mapping.order_columns
-        bank_suggestions = mapping.bank_columns
+    if effective_mapping:
+        order_suggestions = effective_mapping.order_columns
+        bank_suggestions = effective_mapping.bank_columns
+    built_in_profiles = recognize_profiles(raw)
+    saved_profile = None
+    if matched_profile is not None:
+        saved_profile = {
+            "id": matched_profile.id,
+            "name": matched_profile.name,
+            "schema_version": matched_profile.schema_version,
+            "mapping_snapshot": matched_profile.mapping_snapshot
+            | {
+                "import_profile_id": matched_profile.id,
+                "import_profile_schema_version": matched_profile.schema_version,
+            },
+        }
     manifest = {
         "dataset_profile": dataset_profile,
+        "schema_fingerprint": fingerprint,
+        "schema_version": SCHEMA_VERSION,
+        "schema_snapshot": source_schema(raw),
+        "recognized_profiles": built_in_profiles,
+        "applied_import_profile_id": matched_profile.id if matched_profile is not None else None,
         "source_paths": {
             key: relative_artifact_path(Path(value)) if key in {"orders", "bank", "workbook"} else value
             for key, value in source_paths.items()
@@ -191,6 +223,13 @@ def _persist_inspection(
         "detected_structure": {
             "orders": to_jsonable(raw.orders.structure),
             "bank_transactions": to_jsonable(raw.bank_transactions.structure),
+        },
+        "import_profile": {
+            "schema_fingerprint": fingerprint,
+            "schema_version": SCHEMA_VERSION,
+            "recognized": built_in_profiles,
+            "saved_profile": saved_profile,
+            "applied": matched_profile is not None,
         },
     }
 
@@ -259,6 +298,16 @@ def read_source_rows(
 def confirm_mapping(db: Session, session: UploadSession, request: MappingRequest) -> dict[str, Any]:
     mapping = mapping_from_request(request)
     raw = load_raw_bundle(session)
+    if mapping.import_profile_id:
+        profile = db.get(ImportProfile, mapping.import_profile_id)
+        if profile is None:
+            raise ValueError("Import profile không tồn tại")
+        if (
+            mapping.import_profile_schema_version != profile.schema_version
+            or profile.schema_version != SCHEMA_VERSION
+            or profile.schema_fingerprint != schema_fingerprint(raw)
+        ):
+            raise ValueError("Import profile không còn khớp cấu trúc nguồn hiện tại")
     if not mapping.confirmed_structure and any(
         table.structure.status == "NEEDS_REVIEW" for table in (raw.orders, raw.bank_transactions)
     ):

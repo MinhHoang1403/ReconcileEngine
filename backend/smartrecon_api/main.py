@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from backend.smartrecon_api.config import get_settings
 from backend.smartrecon_api.routers.health import router as health_router
+from backend.smartrecon_api.routers.profiles import router as profiles_router
 from backend.smartrecon_api.routers.reviews import router as reviews_router
 from backend.smartrecon_api.routers.runs import router as runs_router
 from backend.smartrecon_api.routers.uploads import router as uploads_router
@@ -18,11 +19,12 @@ def create_app() -> FastAPI:
         CORSMiddleware,
         allow_origins=settings.cors_origin_list,
         allow_credentials=False,
-        allow_methods=["GET", "POST"],
+        allow_methods=["GET", "POST", "PATCH", "DELETE"],
         allow_headers=["Content-Type", "X-Request-ID"],
     )
     app.include_router(health_router)
     app.include_router(uploads_router)
+    app.include_router(profiles_router)
     app.include_router(runs_router)
     app.include_router(reviews_router)
     return app

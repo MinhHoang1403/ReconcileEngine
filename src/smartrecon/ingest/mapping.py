@@ -209,6 +209,8 @@ class MappingConfig:
     bank_transformations: dict[str, dict[str, Any]] = field(default_factory=dict)
     transformation_version: str = TRANSFORMATION_VERSION
     confirmed_ambiguities: tuple[str, ...] = ()
+    import_profile_id: str | None = None
+    import_profile_schema_version: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
