@@ -6,6 +6,22 @@ Một phiên chỉ nhận hai nguồn: `internal_receivables` và `bank_transact
 
 Raw file là bất biến. Mỗi canonical row phải giữ file SHA-256, số dòng nguồn và row hash. ID luôn là chuỗi để bảo toàn số 0 đầu; ngày được parse bằng format/timezone được người dùng xác nhận; tiền được parse bằng `Decimal` rồi chuyển sang integer minor units. Separator thập phân/hàng nghìn phải theo mapping đã xác nhận. Với VND, phần thập phân sau khi diễn giải separator phải bằng 0; nếu khác 0, dòng bị từ chối bằng lỗi Health Gate `BLOCKING`, không làm tròn và không đi tiếp vào matching. BRL giữ chính sách hai minor digits hiện hành.
 
+## Nhận diện cấu trúc và chuẩn hóa thích ứng
+
+Reader chỉ xét UTF-8/UTF-8-SIG cho CSV và các delimiter cho phép `,`, `;`, tab, `|`. XLSX được đọc theo sheet và vùng tiêu đề đã phát hiện; giới hạn kích thước ZIP, số sheet, dòng và cột vẫn áp dụng. Kết quả inspection lưu sheet, delimiter, dòng/độ sâu header, các phương án cạnh tranh, lý do chọn và chính xác số dòng nguồn. Dòng trống có thể bỏ qua; footer/tổng cộng không được âm thầm bỏ mà phải đi qua chuẩn hóa/Health Gate.
+
+Mapping suggestion là heuristic giải thích được, không phải xác suất. Mỗi đề xuất có cột nguồn hoặc transformation, điểm heuristic, mức tin cậy, lý do, ứng viên cạnh tranh và mẫu trước/sau. Ngày ở chế độ `AUTO` chỉ nhận ISO/năm-trước hoặc ngày-tháng không mơ hồ; trường hợp như `01/02/2026` phải chọn format rõ ràng. Hai feed có thể dùng format ngày riêng.
+
+Transformation chỉ chạy khi nằm trong mapping snapshot:
+
+- `SPLIT_CREDIT_DEBIT` dùng đúng một cột ghi có hoặc ghi nợ khác 0 để dựng amount/direction; cả hai cùng có tiền hoặc cùng bằng 0 là lỗi chặn.
+- `SIGNED_AMOUNT` chỉ hợp lệ khi profile/cấu hình nêu rõ chiều của số dương.
+- `VALUE_MAP` đổi các enum như `CR/DR` hoặc trạng thái tiếng Việt theo bảng đã xác nhận; giá trị ngoài bảng bị chặn.
+
+Không tự đổi `GROSS_SETTLEMENT` thành cash, không tự tạo ID giao dịch thiếu và không tự tổng hợp Shopee payout theo đợt. Snapshot normalization gồm mapping, transformation version, parse settings, xác nhận của người dùng và profile ID/schema version nếu có.
+
+Import profile đã lưu gắn với fingerprint SHA-256 của schema hai feed, gồm tên/cấu trúc cột theo thứ tự, độ sâu header và delimiter, cùng `schema_version`. Profile chỉ được tái sử dụng khi cả fingerprint và version khớp; structure drift không được áp dụng gần đúng. Profile có thể sửa/xóa qua API, nhưng cập nhật mapping chỉ nhận một upload session có cùng schema.
+
 ## Khoản phải thu
 
 Trường bắt buộc:

@@ -42,7 +42,9 @@ Backend host cần một `DATABASE_URL` PostgreSQL phù hợp. Trong Compose, jo
 
 ## Luồng giao diện
 
-Website tổ chức quy trình thành bốn bước: chọn nguồn dữ liệu; kiểm tra và ánh xạ; kiểm tra chất lượng và chạy đối soát; xem kết quả và xuất báo cáo. Dashboard sắp xếp theo Tổng quan → Phân tích → Giao dịch cần xác minh → Tra cứu → Xuất báo cáo. Review queue cho phép xem allocation preview và bằng chứng nguồn trước khi approve/reject; undo chỉ khả dụng khi chưa có revision phụ thuộc. Tìm kiếm và bộ lọc chỉ áp dụng trên phần dữ liệu đã tải; nút “Tải thêm” lấy trang kế tiếp và giao diện luôn hiển thị riêng số đã tải/tổng số trên server. Chọn mã giao dịch để xem hai phía đối chiếu, phân bổ, bằng chứng và dòng dữ liệu nguồn.
+Website tổ chức quy trình thành bốn bước: chọn hai file hoặc một workbook; kiểm tra cấu trúc và đề xuất ghép cột; xem trước dữ liệu chuẩn hóa; kiểm tra chất lượng và chạy đối soát; xem kết quả và xuất báo cáo. Màn hình import nêu loại nguồn, sheet/header đã chọn, mức tin cậy/lý do, các mục còn mơ hồ và dữ liệu gốc cạnh dữ liệu canonical. Người dùng có thể sửa toàn bộ mapping, chọn format ngày riêng, lưu import profile theo exact schema fingerprint và tải CSV canonical sau khi Health Gate sẵn sàng. Không có thao tác upload/preview nào tự chạy matching.
+
+Dashboard sắp xếp theo Tổng quan → Phân tích → Giao dịch cần xác minh → Tra cứu → Xuất báo cáo. Review queue cho phép xem allocation preview và bằng chứng nguồn trước khi approve/reject; undo chỉ khả dụng khi chưa có revision phụ thuộc. Tìm kiếm và bộ lọc chỉ áp dụng trên phần dữ liệu đã tải; nút “Tải thêm” lấy trang kế tiếp và giao diện luôn hiển thị riêng số đã tải/tổng số trên server. Chọn mã giao dịch để xem hai phía đối chiếu, phân bổ, bằng chứng và dòng dữ liệu nguồn.
 
 KPI tiền giữ riêng ba thành phần: tiền đã nhận và đối chiếu thành công, điều chỉnh đã xác minh và số còn phải thu. Dashboard bổ sung thống kê review, tỷ lệ xác nhận có mẫu số rõ ràng, loại quan hệ, ngoại lệ, residual và độ trễ trên cùng effective revision. Báo cáo Excel có chín trang tính với nhãn tiếng Việt, định dạng tiền/ngày, lịch sử review thực, trạng thái nhóm, bộ lọc và thông tin truy vết nguồn.
 
@@ -99,6 +101,7 @@ Hai file JSON trong `reports/` là runtime evidence theo máy và không đượ
 ## Tài liệu vận hành và nghiệm thu
 
 - `docs/API_CONTRACT.md`: endpoints, DTO, mã lỗi, pagination và an toàn upload/export.
+- `docs/SMART_IMPORT_GUIDE.md`: cách nhận diện cấu trúc, xác nhận mapping, preview và quản lý import profile.
 - `docs/OPERATIONS.md`: hướng dẫn Windows/PowerShell, Docker Desktop/WSL2, restart và chẩn đoán.
 - `docs/DEPLOYMENT.md`: cấu hình production, migration one-shot, Linux/HTTPS, backup và restore drill độc lập.
 - `docs/EVALUATION_REPORT.md`: protocol, Precision/Recall/F1, ablation, benchmark và giới hạn.

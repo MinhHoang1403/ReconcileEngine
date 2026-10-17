@@ -166,3 +166,23 @@ Sau `docker compose down` không kèm `-v` và `docker compose up -d`, ba dịch
 Regression cuối trước commit: Ruff lint/format pass; 103 Python tests pass (hai warning môi trường đã công bố), 28 golden tests, 4 property tests, 19 frontend tests, frontend lint/build và `npm audit` 0 vulnerabilities đều đạt. Evaluation smoke 1.000 orders/998 bank rows chạy 3,112 giây, hard-profile edge F1 `0,9961`, false auto-confirm count `0`; holdout F1 vẫn `0,9556`. Production build còn warning Plotly chunk lớn đã biết, không có test failure.
 
 Clean-clone cuối lấy trực tiếp `origin/main` tại commit `454cad3e3bc7d66685879ca5830fa610bb891e38`, worktree sạch, dùng project/image tags/ports/volumes riêng. Ba service healthy và migration exit 0; run `9c23f1a7-da5b-44ea-8ecb-d2316968cce2` qua concurrency `[409, 200]`, ba audit actions, revision 3 và conservation đúng ở revisions 0–3. Sau `down`/`up` không xóa volume, database giữ `1 → 1` run, dashboard mở lại đúng revision 3/cash 66.531.000 VND, frontend HTTP 200 và XLSX HTTP 200/55.069 bytes. Clone vẫn sạch; project cùng volumes thử đã được xóa, stack chính không bị tác động. GitHub Actions run `38847228208` cho cùng commit có cả backend, frontend và containers job success.
+
+## Smart import acceptance — 2026-10-17
+
+Triển khai được chia thành các commit độc lập đã push lên `origin/main`: structure detection `5de1a16`, semantic mapping `97e3f38`, adaptive normalization `ba8190d`, schema-bound import profiles `a8e08ed` và guided preview UI/API `7e892ad`.
+
+Kết quả regression trên host:
+
+- Ruff lint: pass; Ruff format check: 107 files formatted.
+- Python: `132 passed`, chỉ còn Starlette/httpx deprecation và Windows ZMQ selector warning đã biết.
+- Golden + property: `32 passed` (28 golden tests phủ 24 fixture catalog và 4 conservation property tests).
+- Frontend: ESLint pass, Vitest `19 passed`, TypeScript/Vite production build pass; warning duy nhất là Plotly chunk khoảng 1,55 MB. `npm audit --omit=dev --audit-level=high`: 0 vulnerability.
+- Smart import API/unit focus: structure, mapping, adaptive normalization, profile CRUD/drift, preview và normalized CSV đều pass. CSV/XLSX, VND fractional, ambiguous dates, split credit/debit, signed amount có cấu hình, value map và missing ID đều có negative tests.
+
+Docker Compose được build lại từ source. Alembic chạy `20261015_03 -> 20261017_04`; `db`, `backend`, `frontend` healthy và migrate exit 0. PostgreSQL hiện hữu trước build có 74 uploads, 67 runs, 501 artifacts. Sau hai browser runs, một upload/profile acceptance và restart không xóa volume, hệ thống còn 77 uploads, 69 runs, 523 artifacts và 1 import profile.
+
+Edge headless desktop `1440x900` và mobile `390x844` đi hết demo → inspect/mapping/normalized preview → Health Gate → run/dashboard → XLSX export → review approve/undo → tạo phiên mới/reopen. Desktop run `3027ee19-f7f7-46d4-9542-03035cd77fcf`, mobile run `32e1d0e6-f58f-4bd5-9fb8-670bd65f8c2d`; cả hai có conservation `true`, hai chart, bốn explorer tab, export khoảng 56,9 KB, không lỗi console/runtime/network. `documentElement.scrollWidth <= innerWidth` đạt ở nguồn và màn hình được kiểm tra cho cả hai viewport.
+
+Persistence acceptance tạo profile synthetic `851087c6-87d4-42de-99e1-078cc6ae4ebb`, fingerprint `7494017aed82e921cd5ff3e88f74e43c1c9639c11ae6242ca420d62f90d73a09`. Sau `docker compose restart`, profile vẫn liệt kê và tự áp dụng lại đúng ID cho schema demo. Run cũ `ad70877f-b9c2-405b-b6fa-b7e292df9ad8` vẫn `COMPLETED`, checksum không đổi `8ffc205f…985b`; XLSX cũ tải HTTP 200, 152.592 bytes. Không dùng `down -v` và không xóa dữ liệu/volume.
+
+Phạm vi an toàn được giữ nguyên: không đổi matching/allocation, không auto-confirm theo amount/date/fuzzy, không đổi gross thành cash, không sinh surrogate ID tùy tiện, không tự tổng hợp Shopee payout và không làm tròn VND phân số. Profile chỉ tái sử dụng khi exact fingerprint + schema version khớp.

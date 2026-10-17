@@ -34,6 +34,8 @@ Tài liệu này phân biệt nguồn nghiên cứu, đặc tả chính thức, 
 
 ## API, giao diện, container và bảo mật file
 
+- [Python `csv` documentation](https://docs.python.org/3/library/csv.html) mô tả dialect, delimiter, quoting và `DictWriter`. SmartRecon dùng tập delimiter đóng và tự chấm điểm nhiều phương án thay vì coi `Sniffer` là quyết định nghiệp vụ cuối cùng.
+- [openpyxl `load_workbook`](https://openpyxl.readthedocs.io/en/stable/_modules/openpyxl/reader/excel.html) định nghĩa `read_only`, `keep_vba` và `data_only`. Reader dùng workbook read-only, không giữ/chạy VBA và đọc cached value thay vì thực thi công thức; các giới hạn ZIP riêng vẫn bắt buộc.
 - [FastAPI file upload](https://fastapi.tiangolo.com/tutorial/request-files/) và [Pydantic documentation](https://docs.pydantic.dev/latest/) là contract framework chính thức.
 - [React documentation](https://react.dev/), [Vite guide](https://vite.dev/guide/) và [Plotly JavaScript documentation](https://plotly.com/javascript/) là nguồn công nghệ frontend.
 - [Docker Compose documentation](https://docs.docker.com/compose/) và [Docker volumes](https://docs.docker.com/engine/storage/volumes/) là nguồn cho stack ba service và named volumes.

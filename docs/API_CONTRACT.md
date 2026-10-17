@@ -5,10 +5,11 @@ API HTTP không gắn nhãn phiên bản trong path. OpenAPI tương tác có t�
 ## Luồng chuẩn
 
 1. `POST /api/demo/datasets` hoặc `POST /api/uploads/inspect` để tạo upload session bất biến và nhận raw EDA/mapping gợi ý.
-2. `POST /api/uploads/{session_id}/mapping` để xác nhận mapping, chuẩn hóa và chạy Health Gate.
-3. Nếu còn lỗi chặn, remap/reupload hoặc `POST /api/uploads/{session_id}/resolutions` với danh sách dòng loại trừ cùng lý do. Warning có thể được ghi nhận bằng `acknowledged_issue_codes` nhưng không bị xóa khỏi audit snapshot.
-4. Chỉ session `HEALTH_READY` được gửi tới `POST /api/runs`.
-5. Dùng cùng `run_id` và `effective_revision` cho dashboard, explorer và export.
+2. Có thể gọi `POST /api/uploads/{session_id}/preview` nhiều lần để xem kết quả chuẩn hóa giới hạn mà không thay đổi session.
+3. `POST /api/uploads/{session_id}/mapping` để xác nhận mapping, chuẩn hóa và chạy Health Gate.
+4. Nếu còn lỗi chặn, remap/reupload hoặc `POST /api/uploads/{session_id}/resolutions` với danh sách dòng loại trừ cùng lý do. Warning có thể được ghi nhận bằng `acknowledged_issue_codes` nhưng không bị xóa khỏi audit snapshot.
+5. Chỉ session `HEALTH_READY` được gửi tới `POST /api/runs`.
+6. Dùng cùng `run_id` và `effective_revision` cho dashboard, explorer và export.
 
 ## Endpoints
 
@@ -17,10 +18,16 @@ API HTTP không gắn nhãn phiên bản trong path. OpenAPI tương tác có t�
 | GET | `/healthz` | Readiness của API và PostgreSQL |
 | POST | `/api/demo/datasets` | Session từ synthetic VND, chỉ khi `DEMO_MODE=true` |
 | POST | `/api/uploads/inspect` | Hai file `orders_file` + `bank_file`, hoặc một `workbook_file` hai sheet |
+| POST | `/api/uploads/{session_id}/preview` | Preview canonical giới hạn và lỗi dự kiến; không ghi mapping/health snapshot |
 | POST | `/api/uploads/{session_id}/mapping` | Standardized EDA và Health Gate |
+| GET | `/api/uploads/{session_id}/normalized/{feed}.csv` | CSV canonical có lineage; chỉ khi session `HEALTH_READY` |
 | GET | `/api/uploads/{session_id}/health` | Health snapshot đã lưu |
 | GET | `/api/uploads/{session_id}/health/issues/{issue_index}` | Dòng nguồn, giá trị gốc/chuẩn hóa và hướng xử lý của một vấn đề chất lượng |
 | POST | `/api/uploads/{session_id}/resolutions` | Exclude có lý do/acknowledge và chạy lại gate |
+| GET | `/api/import-profiles` | Danh sách cấu hình nhập liệu đã xác nhận |
+| POST | `/api/import-profiles` | Lưu mapping của một upload session theo exact schema fingerprint |
+| PATCH | `/api/import-profiles/{profile_id}` | Đổi tên hoặc cập nhật từ session có cùng schema |
+| DELETE | `/api/import-profiles/{profile_id}` | Xóa import profile; raw/session/run không bị xóa |
 | POST | `/api/runs` | Chạy một snapshot bằng Python Core duy nhất |
 | GET | `/api/runs/{run_id}` | Metadata/policy để mở lại run |
 | GET | `/api/runs/{run_id}/dashboard` | KPI, analytics, layer counts, payment statuses và conservation |
@@ -50,10 +57,12 @@ Các endpoint dashboard, danh sách và detail nhận `revision >= 0` tùy chọ
 - Tên file phía client không được dùng làm đường dẫn lưu trữ. Artifact nằm dưới volume root với server-generated UUID và SHA-256.
 - Export đặt chuỗi bắt đầu bằng `=`, `+`, `-`, `@` thành text, đồng thời tắt tự động formula/URL của writer. Workbook dùng nhãn tiếng Việt, giữ số tiền ở dạng số, ngày ở dạng ngày, không đưa JSON thô vào ô người dùng.
 - Ground truth synthetic không có trong response hoặc runtime input của API.
+- Inspection trả `detected_structure`, `mapping_suggestions` và `import_profile`. Điểm mapping là heuristic có lý do, không phải xác suất. Profile lưu chỉ được đánh dấu `applied=true` khi exact fingerprint và schema version khớp.
+- Mapping request giữ riêng date format từng feed, transformations, transformation version, cấu hình separator, profile ID/version và các xác nhận mơ hồ. Preview không tự bắt đầu matching; normalized CSV không được tải khi Health Gate còn lỗi chặn.
 
 ## Lỗi ổn định
 
-Lỗi nghiệp vụ trả `detail.error_code` và thông điệp tiếng Việt. Các mã chính: `INVALID_UPLOAD` (400), upload quá 25 MB (413), `INVALID_MAPPING`/`INVALID_RESOLUTION` (422), `UPLOAD_NOT_FOUND`/`RUN_NOT_FOUND`/`GROUP_NOT_FOUND`/`REVIEW_ACTION_NOT_FOUND` (404), `HEALTH_BLOCKED`, `MAPPING_REQUIRED`, `STALE_REVISION`, `IDEMPOTENCY_KEY_REUSED`, `ALLOCATION_CONFLICT`, `COMPLEX_GROUP_NOT_APPROVABLE` hoặc `UNDO_DEPENDENCY_CONFLICT` (409), `DATABASE_UNAVAILABLE` (503). Pydantic trả 422 khi DTO sai kiểu hoặc ngoài giới hạn.
+Lỗi nghiệp vụ trả `detail.error_code` và thông điệp tiếng Việt. Các mã chính: `INVALID_UPLOAD` (400), upload quá 25 MB (413), `INVALID_MAPPING`/`INVALID_MAPPING_PREVIEW`/`INVALID_RESOLUTION` (422), `UPLOAD_NOT_FOUND`/`IMPORT_PROFILE_NOT_FOUND`/`RUN_NOT_FOUND`/`GROUP_NOT_FOUND`/`REVIEW_ACTION_NOT_FOUND` (404), `HEALTH_BLOCKED`, `MAPPING_REQUIRED`, `NORMALIZED_EXPORT_NOT_READY`, `IMPORT_PROFILE_CONFLICT`, `IMPORT_PROFILE_SCHEMA_CHANGED`, `STALE_REVISION`, `IDEMPOTENCY_KEY_REUSED`, `ALLOCATION_CONFLICT`, `COMPLEX_GROUP_NOT_APPROVABLE` hoặc `UNDO_DEPENDENCY_CONFLICT` (409), `DATABASE_UNAVAILABLE` (503). Pydantic trả 422 khi DTO sai kiểu hoặc ngoài giới hạn.
 
 ## Snapshot và tiền
 
