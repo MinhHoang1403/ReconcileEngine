@@ -191,7 +191,7 @@ def main() -> None:
         click_button(devtools, "Sử dụng dữ liệu mẫu")
         wait_until(devtools, "document.body.innerText.includes('Kiểm tra và chuẩn hóa dữ liệu')")
         capture(devtools, stage_path("mapping"))
-        click_button(devtools, "Chuẩn hóa dữ liệu")
+        click_button(devtools, "Xác nhận và chuẩn hóa dữ liệu")
         wait_until(devtools, "document.body.innerText.includes('Dữ liệu sẵn sàng đối soát')")
         capture(devtools, stage_path("health"))
         click_button(devtools, "Xem dòng dữ liệu liên quan")

@@ -131,6 +131,10 @@ export function HealthGate({ health, busy, onAcknowledge, onExclude, onRun, onBa
         </div>
         <div className="button-row">
           <button className="secondary" type="button" onClick={onBack} disabled={busy}>Quay lại ánh xạ</button>
+          {ready && <>
+            <a className="secondary link-button" href={`/api/uploads/${health.session_id}/normalized/orders.csv`}>Tải CSV đơn hàng</a>
+            <a className="secondary link-button" href={`/api/uploads/${health.session_id}/normalized/bank_transactions.csv`}>Tải CSV giao dịch</a>
+          </>}
           {health.report.warning_count > 0 && (
             <button className="secondary" type="button" disabled={busy || warningsAcknowledged} onClick={onAcknowledge}>
               {warningsAcknowledged ? "Đã ghi nhận cảnh báo" : "Ghi nhận cảnh báo"}

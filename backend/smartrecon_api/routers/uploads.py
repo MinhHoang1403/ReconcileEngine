@@ -4,6 +4,7 @@ from typing import Annotated
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 from backend.smartrecon_api.config import get_settings
@@ -22,6 +23,8 @@ from backend.smartrecon_api.services.uploads import (
     create_demo_session,
     create_upload_session,
     health_issue_detail,
+    normalized_csv,
+    preview_mapping,
     save_upload,
 )
 from smartrecon.ingest.readers import InputFileError, read_source_bundle
@@ -117,6 +120,34 @@ def map_upload(session_id: str, request: MappingRequest, db: Session = Depends(g
             status_code=422,
             detail={"error_code": "INVALID_MAPPING", "message": str(exc)},
         ) from exc
+
+
+@router.post("/uploads/{session_id}/preview")
+def preview_upload(session_id: str, request: MappingRequest, db: Session = Depends(get_db)) -> dict:
+    try:
+        return preview_mapping(_session_or_404(db, session_id), request)
+    except (InputFileError, ValueError) as exc:
+        raise HTTPException(
+            status_code=422,
+            detail={"error_code": "INVALID_MAPPING_PREVIEW", "message": str(exc)},
+        ) from exc
+
+
+@router.get("/uploads/{session_id}/normalized/{feed}.csv")
+def download_normalized(session_id: str, feed: str, db: Session = Depends(get_db)) -> Response:
+    try:
+        content = normalized_csv(_session_or_404(db, session_id), feed)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail={"error_code": "NORMALIZED_EXPORT_NOT_READY", "message": str(exc)},
+        ) from exc
+    filename = "receivables-normalized.csv" if feed == "orders" else "payments-normalized.csv"
+    return Response(
+        content="\ufeff" + content,
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @router.get("/uploads/{session_id}/health", response_model=HealthResponse)

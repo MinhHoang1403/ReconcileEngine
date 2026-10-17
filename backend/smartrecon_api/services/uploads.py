@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import csv
 import shutil
 from dataclasses import asdict
+from io import StringIO
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -328,6 +330,61 @@ def confirm_mapping(db: Session, session: UploadSession, request: MappingRequest
     session.status = "HEALTH_READY" if report.status == "READY" else "HEALTH_BLOCKED"
     db.commit()
     return session.health_snapshot | {"session_id": session.id, "status": session.status}
+
+
+def preview_mapping(session: UploadSession, request: MappingRequest, *, limit: int = 10) -> dict[str, Any]:
+    """Normalize a bounded preview without mutating the upload session."""
+    mapping = mapping_from_request(request)
+    raw = load_raw_bundle(session)
+    normalized = normalize_bundle(raw, mapping)
+    report = build_health_report(normalized)
+    standardized = summarize_standardized(
+        list(normalized.orders), list(normalized.bank_transactions), mapping.currency.value
+    )
+    return {
+        "session_id": session.id,
+        "status": report.status,
+        "orders": [to_jsonable(order) for order in normalized.orders[:limit]],
+        "bank_transactions": [to_jsonable(bank) for bank in normalized.bank_transactions[:limit]],
+        "issues": [to_jsonable(issue) for issue in report.issues[:limit]],
+        "blocking_count": report.blocking_count,
+        "warning_count": report.warning_count,
+        "standardized_eda": eda_to_dict(standardized),
+        "preview_limit": limit,
+    }
+
+
+def normalized_csv(session: UploadSession, feed: str) -> str:
+    """Serialize confirmed canonical rows only after the Health Gate is ready."""
+    if session.status != "HEALTH_READY" or not session.mapping_snapshot:
+        raise ValueError("Chỉ tải dữ liệu chuẩn hóa sau khi Health Gate sẵn sàng")
+    normalized, report = normalize_session(session)
+    if report.status != "READY":
+        raise ValueError("Dữ liệu còn lỗi chặn chưa được giải quyết")
+    if feed == "orders":
+        records = [asdict(row) for row in normalized.orders]
+    elif feed == "bank_transactions":
+        records = [asdict(row) for row in normalized.bank_transactions]
+    else:
+        raise ValueError("Feed chuẩn hóa không hợp lệ")
+    flattened: list[dict[str, Any]] = []
+    for record in records:
+        lineage = record.pop("lineage", None) or {}
+        flattened.append(
+            {
+                **to_jsonable(record),
+                "source_file_id": lineage.get("source_file_id"),
+                "source_row_number": lineage.get("source_row_number"),
+                "source_row_hash": lineage.get("source_row_hash"),
+            }
+        )
+    if not flattened:
+        return ""
+    output = StringIO(newline="")
+    writer = csv.DictWriter(output, fieldnames=list(flattened[0]))
+    writer.writeheader()
+    writer.writerows(flattened)
+    return output.getvalue()
 
 
 def normalize_session(session: UploadSession) -> tuple[NormalizedBundle, Any]:

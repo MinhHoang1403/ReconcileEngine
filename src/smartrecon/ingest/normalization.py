@@ -256,6 +256,8 @@ def _validate_mapping(
     for canonical, source in columns.items():
         if source:
             selected.setdefault(source, []).append(canonical)
+    for source in transformation_sources:
+        selected.setdefault(source, []).append("transformation")
     conflicts = {source: fields for source, fields in selected.items() if len(fields) > 1}
     if conflicts:
         explanation = "; ".join(

@@ -18,6 +18,50 @@ export type MappingState = {
   thousand_separator: string | null;
   order_defaults: Record<string, string>;
   bank_defaults: Record<string, string>;
+  confirmed_structure: boolean;
+  order_date_format: string | null;
+  bank_date_format: string | null;
+  order_transformations: Record<string, Record<string, unknown>>;
+  bank_transformations: Record<string, Record<string, unknown>>;
+  transformation_version: string;
+  confirmed_ambiguities: string[];
+  import_profile_id: string | null;
+  import_profile_schema_version: string | null;
+};
+
+export type MappingSuggestion = {
+  canonical_target: string;
+  source_column: string | null;
+  transformation: Record<string, unknown> | null;
+  heuristic_score: number;
+  confidence: "HIGH" | "MEDIUM" | "LOW";
+  reasons: string[];
+  competitors: { source_column: string; heuristic_score: number; reasons: string[] }[];
+  sample_before: string[];
+  sample_after: string[];
+  status: "auto-selected" | "needs-review" | "unsupported";
+};
+
+export type MappingAnalysis = {
+  suggestions: MappingSuggestion[];
+  selected_mapping: Record<string, string>;
+  selected_transformations: Record<string, Record<string, unknown>>;
+  required_total: number;
+  required_auto_selected: number;
+  required_needs_review: number;
+  required_unsupported: number;
+};
+
+export type DetectedStructure = {
+  status: "AUTO_SELECTED" | "NEEDS_REVIEW";
+  reasons: string[];
+  selected: {
+    sheet_name: string | null;
+    delimiter: string | null;
+    header_row_number: number;
+    header_depth: number;
+    columns: string[];
+  };
 };
 
 export type Inspection = {
@@ -26,6 +70,38 @@ export type Inspection = {
   dataset_profile: string;
   raw_eda: { orders: RawEda; bank_transactions: RawEda };
   suggested_mapping: Pick<MappingState, "order_columns" | "bank_columns">;
+  mapping_suggestions: { orders: MappingAnalysis; bank_transactions: MappingAnalysis };
+  detected_structure: { orders: DetectedStructure; bank_transactions: DetectedStructure };
+  import_profile: {
+    schema_fingerprint: string;
+    schema_version: string;
+    recognized: Record<string, { key: string; name: string; status: string; reasons: string[] }>;
+    saved_profile: { id: string; name: string; schema_version: string; mapping_snapshot: MappingState } | null;
+    applied: boolean;
+  };
+};
+
+export type NormalizedPreview = {
+  session_id: string;
+  status: "READY" | "BLOCKED";
+  orders: Record<string, unknown>[];
+  bank_transactions: Record<string, unknown>[];
+  issues: HealthIssue[];
+  blocking_count: number;
+  warning_count: number;
+  standardized_eda: Record<string, number | string | null>;
+  preview_limit: number;
+};
+
+export type ImportProfile = {
+  id: string;
+  name: string;
+  schema_fingerprint: string;
+  schema_version: string;
+  schema_snapshot: Record<string, unknown>;
+  mapping_snapshot: MappingState;
+  created_at: string | null;
+  updated_at: string | null;
 };
 
 export type HealthIssue = {

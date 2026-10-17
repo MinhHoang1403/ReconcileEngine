@@ -5,9 +5,17 @@ type Props = {
   busy: boolean;
   ordersFile: File | null;
   bankFile: File | null;
+  workbookFile: File | null;
+  uploadMode: "files" | "workbook";
+  ordersSheet: string;
+  bankSheet: string;
   reopenId: string;
   onOrdersFile: (file: File | null) => void;
   onBankFile: (file: File | null) => void;
+  onWorkbookFile: (file: File | null) => void;
+  onUploadMode: (mode: "files" | "workbook") => void;
+  onOrdersSheet: (value: string) => void;
+  onBankSheet: (value: string) => void;
   onReopenId: (value: string) => void;
   onUpload: () => void;
   onDemo: () => void;
@@ -46,7 +54,11 @@ function FileField({
 }
 
 export function SourceWorkspace(props: Props) {
-  const canUpload = Boolean(props.ordersFile && props.bankFile && props.serviceReady && !props.busy);
+  const sheetSelectionValid = Boolean(props.ordersSheet) === Boolean(props.bankSheet);
+  const hasSources = props.uploadMode === "files"
+    ? Boolean(props.ordersFile && props.bankFile)
+    : Boolean(props.workbookFile && sheetSelectionValid);
+  const canUpload = Boolean(hasSources && props.serviceReady && !props.busy);
   function submitUpload(event: FormEvent) {
     event.preventDefault();
     if (canUpload) props.onUpload();
@@ -70,13 +82,31 @@ export function SourceWorkspace(props: Props) {
       <div className="source-layout">
         <form className="surface upload-workspace" onSubmit={submitUpload}>
           <div className="surface-heading">
-            <div><span className="section-index">01</span><div><h2>Tải lên dữ liệu</h2><p>Chọn đủ hai nguồn để bắt đầu khám phá dữ liệu.</p></div></div>
-            <span className="required-note">2 file bắt buộc</span>
+            <div><span className="section-index">01</span><div><h2>Tải lên dữ liệu</h2><p>Chọn hai file riêng hoặc một workbook chứa hai sheet.</p></div></div>
+            <span className="required-note">2 nguồn bắt buộc</span>
           </div>
-          <div className="file-grid">
-            <FileField id="orders-file" label="Danh sách đơn hàng cần thu tiền" hint="CSV hoặc XLSX" file={props.ordersFile} onFile={props.onOrdersFile} />
-            <FileField id="bank-file" label="Danh sách giao dịch thanh toán" hint="CSV hoặc XLSX" file={props.bankFile} onFile={props.onBankFile} />
+          <div className="upload-mode" role="group" aria-label="Cách tải dữ liệu">
+            <button className={props.uploadMode === "files" ? "active" : ""} type="button" onClick={() => props.onUploadMode("files")}>Hai file riêng</button>
+            <button className={props.uploadMode === "workbook" ? "active" : ""} type="button" onClick={() => props.onUploadMode("workbook")}>Một workbook</button>
           </div>
+          {props.uploadMode === "files" ? (
+            <div className="file-grid">
+              <FileField id="orders-file" label="Danh sách đơn hàng cần thu tiền" hint="CSV hoặc XLSX" file={props.ordersFile} onFile={props.onOrdersFile} />
+              <FileField id="bank-file" label="Danh sách giao dịch thanh toán" hint="CSV hoặc XLSX" file={props.bankFile} onFile={props.onBankFile} />
+            </div>
+          ) : (
+            <div className="workbook-upload">
+              <FileField id="workbook-file" label="Workbook chứa hai nguồn" hint="XLSX" file={props.workbookFile} onFile={props.onWorkbookFile} />
+              <details>
+                <summary>Chọn sheet thủ công nếu hệ thống không thể phân biệt</summary>
+                <div className="sheet-fields">
+                  <label><span>Sheet đơn hàng</span><input value={props.ordersSheet} onChange={(event) => props.onOrdersSheet(event.target.value)} placeholder="Để trống để tự nhận diện" /></label>
+                  <label><span>Sheet giao dịch</span><input value={props.bankSheet} onChange={(event) => props.onBankSheet(event.target.value)} placeholder="Để trống để tự nhận diện" /></label>
+                </div>
+                {!sheetSelectionValid && <p className="field-error">Hãy nhập cả hai tên sheet hoặc để trống cả hai.</p>}
+              </details>
+            </div>
+          )}
           <div className="source-descriptions">
             <p><strong>File đơn hàng:</strong> chứa thông tin đơn hàng và số tiền cần nhận.</p>
             <p><strong>File giao dịch:</strong> chứa các khoản tiền đã được ngân hàng hoặc cổng thanh toán ghi nhận.</p>

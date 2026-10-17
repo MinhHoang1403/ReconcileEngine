@@ -1,5 +1,5 @@
 import { useEffect, useMemo } from "react";
-import type { MappingState, RawEda } from "../types";
+import type { MappingAnalysis, MappingState, MappingSuggestion, RawEda } from "../types";
 
 type FieldDefinition = { key: string; label: string; description: string; required?: boolean; usage?: string };
 
@@ -37,10 +37,13 @@ type Props = {
   bankEda: RawEda;
   onChange: (mapping: MappingState) => void;
   onValidityChange?: (valid: boolean) => void;
+  suggestions: { orders: MappingAnalysis; bank_transactions: MappingAnalysis };
 };
 
-function mappingProblems(fields: FieldDefinition[], values: Record<string, string>) {
-  const missing = fields.filter((field) => field.required && !values[field.key]);
+function mappingProblems(fields: FieldDefinition[], values: Record<string, string>, transformations: MappingState["bank_transformations"] = {}) {
+  const cashTransformation = transformations.cash_movement;
+  const covered = cashTransformation ? new Set(["posted_amount", "direction"]) : new Set<string>();
+  const missing = fields.filter((field) => field.required && !values[field.key] && !covered.has(field.key));
   const selected = new Map<string, string[]>();
   Object.entries(values).forEach(([field, source]) => {
     if (source) selected.set(source, [...(selected.get(source) ?? []), field]);
@@ -49,12 +52,15 @@ function mappingProblems(fields: FieldDefinition[], values: Record<string, strin
   return { missing, reused };
 }
 
-function Fields({ fields, columns, values, sampleRows, onField }: {
+function Fields({ fields, columns, values, sampleRows, onField, suggestions, transformations, onManualCash }: {
   fields: FieldDefinition[];
   columns: string[];
   values: Record<string, string>;
   sampleRows: Record<string, unknown>[];
   onField: (field: string, source: string) => void;
+  suggestions?: MappingSuggestion[];
+  transformations?: MappingState["bank_transformations"];
+  onManualCash?: () => void;
 }) {
   return (
     <div className="mapping-grid">
@@ -63,29 +69,39 @@ function Fields({ fields, columns, values, sampleRows, onField }: {
         const samples = selectedColumn
           ? sampleRows.map((row) => row[selectedColumn]).filter((value) => value !== "" && value != null).slice(0, 3)
           : [];
-        return <label key={field.key}>
+        const suggestion = suggestions?.find((item) => item.canonical_target === field.key);
+        const derived = ["posted_amount", "direction"].includes(field.key) && transformations?.cash_movement;
+        return <label key={field.key} className={suggestion?.status === "needs-review" || suggestion?.status === "unsupported" ? "needs-review" : ""}>
           <span className="field-label">
-            <span>{field.label}<small>{field.key}</small></span>
+            <span>{field.label}</span>
             {field.required ? <em>Bắt buộc</em> : <em className="optional-tag">{field.usage}</em>}
           </span>
           <span className="field-help">{field.description}</span>
-          <select
+          {derived ? <div className="transformation-choice">
+            <strong>Tự dựng từ cột ghi có / ghi nợ</strong>
+            <span>{String(transformations?.cash_movement.credit_column)} · {String(transformations?.cash_movement.debit_column)}</span>
+            <button type="button" className="text-button" onClick={onManualCash}>Ghép cột thủ công</button>
+          </div> : <select
             required={field.required}
             value={values[field.key] ?? ""}
             onChange={(event) => onField(field.key, event.target.value)}
           >
             <option value="">— Chưa ghép cột —</option>
             {columns.map((column) => <option key={column} value={column}>{column}</option>)}
-          </select>
-          {field.required && !selectedColumn && <span className="field-error">Cần chọn cột nguồn để chuẩn hóa trường này.</span>}
+          </select>}
+          {field.required && !selectedColumn && !derived && <span className="field-error">Cần chọn cột nguồn để chuẩn hóa trường này.</span>}
           {selectedColumn && <span className="field-sample">Giá trị mẫu: {samples.length ? samples.map(String).join(" · ") : "không có giá trị trong phần xem trước"}</span>}
+          {suggestion && <details className={`mapping-evidence status-${suggestion.status}`} open={suggestion.status !== "auto-selected"}>
+            <summary>{suggestion.status === "auto-selected" ? "Đã gợi ý" : suggestion.status === "unsupported" ? "Chưa xác định được" : "Cần xác nhận"} · Tin cậy {suggestion.confidence === "HIGH" ? "cao" : suggestion.confidence === "MEDIUM" ? "trung bình" : "thấp"}</summary>
+            <ul>{suggestion.reasons.map((reason) => <li key={reason}>{reason}</li>)}</ul>
+          </details>}
         </label>;
       })}
     </div>
   );
 }
 
-function FeedMapping({ title, description, fields, columns, values, sampleRows, onField }: {
+function FeedMapping({ title, description, fields, columns, values, sampleRows, onField, suggestions, transformations, onManualCash }: {
   title: string;
   description: string;
   fields: FieldDefinition[];
@@ -93,10 +109,13 @@ function FeedMapping({ title, description, fields, columns, values, sampleRows, 
   values: Record<string, string>;
   sampleRows: Record<string, unknown>[];
   onField: (field: string, source: string) => void;
+  suggestions: MappingSuggestion[];
+  transformations?: MappingState["bank_transformations"];
+  onManualCash?: () => void;
 }) {
   const required = fields.filter((field) => field.required);
   const optional = fields.filter((field) => !field.required);
-  const problems = mappingProblems(fields, values);
+  const problems = mappingProblems(fields, values, transformations);
   return (
     <article className="surface mapping-card">
       <div className="surface-heading compact"><div><div><h2>{title}</h2><p>{description}</p></div></div></div>
@@ -106,20 +125,20 @@ function FeedMapping({ title, description, fields, columns, values, sampleRows, 
         </div>
       )}
       <h3 className="mapping-subtitle">Trường bắt buộc</h3>
-      <Fields fields={required} columns={columns} values={values} sampleRows={sampleRows} onField={onField} />
+      <Fields fields={required} columns={columns} values={values} sampleRows={sampleRows} onField={onField} suggestions={suggestions} transformations={transformations} onManualCash={onManualCash} />
       <details className="optional-fields">
         <summary>Trường bổ sung ({optional.length})</summary>
         <p className="optional-note">Các trường bổ sung làm rõ bằng chứng hoặc phục vụ hiển thị. Trường ghi “Hỗ trợ” không đủ để tự xác nhận giao dịch.</p>
-        <Fields fields={optional} columns={columns} values={values} sampleRows={sampleRows} onField={onField} />
+        <Fields fields={optional} columns={columns} values={values} sampleRows={sampleRows} onField={onField} suggestions={suggestions} transformations={transformations} onManualCash={onManualCash} />
       </details>
     </article>
   );
 }
 
-export function MappingEditor({ mapping, ordersEda, bankEda, onChange, onValidityChange }: Props) {
+export function MappingEditor({ mapping, ordersEda, bankEda, onChange, onValidityChange, suggestions }: Props) {
   const valid = useMemo(() => {
     const orderProblems = mappingProblems(orderFields, mapping.order_columns);
-    const bankProblems = mappingProblems(bankFields, mapping.bank_columns);
+    const bankProblems = mappingProblems(bankFields, mapping.bank_columns, mapping.bank_transformations);
     return orderProblems.missing.length === 0 && bankProblems.missing.length === 0
       && orderProblems.reused.length === 0 && bankProblems.reused.length === 0;
   }, [mapping]);
@@ -144,8 +163,16 @@ export function MappingEditor({ mapping, ordersEda, bankEda, onChange, onValidit
             </select>
           </label>
           <label>
-            <span>Định dạng ngày</span>
-            <input value={mapping.date_format} onChange={(event) => onChange({ ...mapping, date_format: event.target.value })} />
+            <span>Ngày trong file đơn hàng</span>
+            <select value={mapping.order_date_format ?? "AUTO"} onChange={(event) => onChange({ ...mapping, order_date_format: event.target.value })}>
+              <option value="AUTO">Tự nhận diện an toàn</option><option value="%Y-%m-%d">Năm-tháng-ngày</option><option value="%d/%m/%Y">Ngày/tháng/năm</option><option value="%m/%d/%Y">Tháng/ngày/năm</option>
+            </select>
+          </label>
+          <label>
+            <span>Ngày trong file giao dịch</span>
+            <select value={mapping.bank_date_format ?? "AUTO"} onChange={(event) => onChange({ ...mapping, bank_date_format: event.target.value })}>
+              <option value="AUTO">Tự nhận diện an toàn</option><option value="%Y-%m-%d">Năm-tháng-ngày</option><option value="%d/%m/%Y">Ngày/tháng/năm</option><option value="%m/%d/%Y">Tháng/ngày/năm</option>
+            </select>
           </label>
         </div>
         <div className="defaults-note"><strong>Giá trị mặc định được áp dụng rõ ràng</strong><span>Trạng thái đơn hàng: ELIGIBLE (đủ điều kiện đối soát). Loại tiền: {mapping.currency}. Không có mặc định giả cho mã, ngày, số tiền, chiều giao dịch hoặc cơ sở số tiền.</span></div>
@@ -158,6 +185,7 @@ export function MappingEditor({ mapping, ordersEda, bankEda, onChange, onValidit
           columns={ordersEda.columns}
           values={mapping.order_columns}
           sampleRows={ordersEda.sample_rows}
+          suggestions={suggestions.orders.suggestions}
           onField={(field, source) => onChange({ ...mapping, order_columns: { ...mapping.order_columns, [field]: source } })}
         />
         <FeedMapping
@@ -167,6 +195,13 @@ export function MappingEditor({ mapping, ordersEda, bankEda, onChange, onValidit
           columns={bankEda.columns}
           values={mapping.bank_columns}
           sampleRows={bankEda.sample_rows}
+          suggestions={suggestions.bank_transactions.suggestions}
+          transformations={mapping.bank_transformations}
+          onManualCash={() => {
+            const next = { ...mapping.bank_transformations };
+            delete next.cash_movement;
+            onChange({ ...mapping, bank_transformations: next });
+          }}
           onField={(field, source) => onChange({ ...mapping, bank_columns: { ...mapping.bank_columns, [field]: source } })}
         />
       </div>

@@ -7,7 +7,9 @@ import type {
   HealthIssueDetail,
   GroupDetail,
   Inspection,
+  ImportProfile,
   MappingState,
+  NormalizedPreview,
   OrderRow,
   Paged,
   RunCreated,
@@ -62,11 +64,32 @@ export const api = {
     body.append("bank_file", bank);
     return requestJson<Inspection>("/api/uploads/inspect", { method: "POST", body });
   },
+  inspectWorkbook: (workbook: File, ordersSheet = "", bankSheet = "") => {
+    const body = new FormData();
+    body.append("workbook_file", workbook);
+    if (ordersSheet && bankSheet) {
+      body.append("orders_sheet", ordersSheet);
+      body.append("bank_sheet", bankSheet);
+    }
+    return requestJson<Inspection>("/api/uploads/inspect", { method: "POST", body });
+  },
+  previewMapping: (sessionId: string, mapping: MappingState) =>
+    requestJson<NormalizedPreview>(`/api/uploads/${sessionId}/preview`, {
+      method: "POST",
+      headers: jsonHeaders,
+      body: JSON.stringify(mapping),
+    }),
   confirmMapping: (sessionId: string, mapping: MappingState) =>
     requestJson<HealthResponse>(`/api/uploads/${sessionId}/mapping`, {
       method: "POST",
       headers: jsonHeaders,
       body: JSON.stringify(mapping),
+    }),
+  createImportProfile: (sessionId: string, name: string) =>
+    requestJson<ImportProfile>("/api/import-profiles", {
+      method: "POST",
+      headers: jsonHeaders,
+      body: JSON.stringify({ session_id: sessionId, name }),
     }),
   resolveHealth: (
     sessionId: string,

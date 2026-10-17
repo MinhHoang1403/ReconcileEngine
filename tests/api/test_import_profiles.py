@@ -54,11 +54,26 @@ def test_import_profile_crud_reuse_and_schema_drift_protection(tmp_path: Path, m
                 "order_defaults": {"order_status": "ELIGIBLE"},
                 "bank_defaults": {},
             }
+            preview = client.post(
+                f"/api/uploads/{inspection['session_id']}/preview",
+                json=mapping,
+            )
+            assert preview.status_code == 200
+            assert preview.json()["status"] == "READY"
+            assert preview.json()["orders"][0]["order_id"] == "O-1"
+            assert preview.json()["bank_transactions"][0]["posted_amount_minor"] == 1000
             confirmed = client.post(
                 f"/api/uploads/{inspection['session_id']}/mapping",
                 json=mapping,
             )
             assert confirmed.status_code == 200
+            orders_csv = client.get(f"/api/uploads/{inspection['session_id']}/normalized/orders.csv")
+            bank_csv = client.get(f"/api/uploads/{inspection['session_id']}/normalized/bank_transactions.csv")
+            assert orders_csv.status_code == 200
+            assert "source_row_number" in orders_csv.text
+            assert "O-1" in orders_csv.text
+            assert bank_csv.status_code == 200
+            assert "B-1" in bank_csv.text
 
             created = client.post(
                 "/api/import-profiles",
