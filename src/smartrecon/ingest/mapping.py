@@ -36,6 +36,7 @@ BANK_FIELDS = BANK_REQUIRED | {
     "batch_ref",
     "declared_fee",
 }
+TRANSFORMATION_VERSION = "smart-import-2026-10-16"
 
 ALIASES: dict[str, tuple[str, ...]] = {
     "order_id": (
@@ -202,6 +203,12 @@ class MappingConfig:
     order_defaults: dict[str, str] = field(default_factory=lambda: {"order_status": "ELIGIBLE"})
     bank_defaults: dict[str, str] = field(default_factory=dict)
     confirmed_structure: bool = False
+    order_date_format: str | None = None
+    bank_date_format: str | None = None
+    order_transformations: dict[str, dict[str, Any]] = field(default_factory=dict)
+    bank_transformations: dict[str, dict[str, Any]] = field(default_factory=dict)
+    transformation_version: str = TRANSFORMATION_VERSION
+    confirmed_ambiguities: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -230,6 +237,7 @@ class MappingAnalysis:
     feed: str
     suggestions: tuple[MappingSuggestion, ...]
     selected_mapping: dict[str, str]
+    selected_transformations: dict[str, dict[str, Any]]
     required_total: int
     required_auto_selected: int
     required_needs_review: int
@@ -489,16 +497,106 @@ def analyze_mapping(
             )
         )
 
+    selected_transformations: dict[str, dict[str, Any]] = {}
+    split = _split_credit_debit_columns(frame) if feed == "bank_transactions" else None
+    if split and {"posted_amount", "direction"} <= canonical_fields:
+        credit_column, debit_column = split
+        specification: dict[str, Any] = {
+            "type": "SPLIT_CREDIT_DEBIT",
+            "credit_column": credit_column,
+            "debit_column": debit_column,
+        }
+        selected_transformations["cash_movement"] = specification
+        selected_mapping.pop("posted_amount", None)
+        selected_mapping.pop("direction", None)
+        split_samples = _split_samples(frame, credit_column, debit_column)
+        replacements = {
+            "posted_amount": MappingSuggestion(
+                canonical_target="posted_amount",
+                source_column=None,
+                transformation=specification,
+                heuristic_score=96,
+                confidence="HIGH",
+                reasons=(
+                    "Phát hiện cặp cột tiền ghi có và tiền ghi nợ có tên rõ ràng",
+                    "Số tiền được lấy từ đúng một phía có giá trị khác 0 trên từng dòng",
+                ),
+                competitors=(),
+                sample_before=split_samples[0],
+                sample_after=split_samples[1],
+                status="auto-selected",
+            ),
+            "direction": MappingSuggestion(
+                canonical_target="direction",
+                source_column=None,
+                transformation=specification,
+                heuristic_score=96,
+                confidence="HIGH",
+                reasons=(
+                    "Chiều giao dịch được dựng từ cột ghi có/ghi nợ, không suy từ dấu âm",
+                    "Dòng có cả hai phía khác 0 sẽ bị Health Gate chặn",
+                ),
+                competitors=(),
+                sample_before=split_samples[0],
+                sample_after=split_samples[1],
+                status="auto-selected",
+            ),
+        }
+        suggestions = [replacements.get(item.canonical_target, item) for item in suggestions]
+
     required = [suggestion for suggestion in suggestions if suggestion.canonical_target in required_fields]
     return MappingAnalysis(
         feed=feed,
         suggestions=tuple(suggestions),
         selected_mapping=selected_mapping,
+        selected_transformations=selected_transformations,
         required_total=len(required),
         required_auto_selected=sum(item.status == "auto-selected" for item in required),
         required_needs_review=sum(item.status == "needs-review" for item in required),
         required_unsupported=sum(item.status == "unsupported" for item in required),
     )
+
+
+def _split_credit_debit_columns(frame: pd.DataFrame) -> tuple[str, str] | None:
+    credit_names = {
+        "credit",
+        "credit_amount",
+        "amount_credit",
+        "ghi_co",
+        "so_tien_ghi_co",
+        "tien_vao",
+    }
+    debit_names = {
+        "debit",
+        "debit_amount",
+        "amount_debit",
+        "ghi_no",
+        "so_tien_ghi_no",
+        "tien_ra",
+    }
+    credits = [str(column) for column in frame.columns if normalize_column_name(str(column)) in credit_names]
+    debits = [str(column) for column in frame.columns if normalize_column_name(str(column)) in debit_names]
+    if len(credits) == 1 and len(debits) == 1 and credits[0] != debits[0]:
+        return credits[0], debits[0]
+    return None
+
+
+def _split_samples(
+    frame: pd.DataFrame, credit_column: str, debit_column: str
+) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    before: list[str] = []
+    after: list[str] = []
+    for _, row in frame[[credit_column, debit_column]].head(5).iterrows():
+        credit = "" if pd.isna(row[credit_column]) else str(row[credit_column]).strip()
+        debit = "" if pd.isna(row[debit_column]) else str(row[debit_column]).strip()
+        before.append(f"ghi có={credit or 'trống'}; ghi nợ={debit or 'trống'}")
+        if credit and credit not in {"0", "0.0", "0,0"} and not debit:
+            after.append(f"CREDIT {credit}")
+        elif debit and debit not in {"0", "0.0", "0,0"} and not credit:
+            after.append(f"DEBIT {debit}")
+        else:
+            after.append("Cần kiểm tra")
+    return tuple(before), tuple(after)
 
 
 def suggest_mapping(columns: list[str], canonical_fields: set[str]) -> dict[str, str]:

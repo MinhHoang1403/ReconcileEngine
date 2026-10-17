@@ -140,3 +140,34 @@ def test_required_field_without_semantic_or_type_evidence_is_unsupported() -> No
 
     assert analysis.required_unsupported >= 3
     assert not {"txn_date", "posted_amount", "direction", "amount_basis"} & analysis.selected_mapping.keys()
+
+
+def test_explicit_credit_debit_pair_is_suggested_as_a_traceable_transformation() -> None:
+    frame = pd.DataFrame(
+        {
+            "Mã giao dịch": ["T1", "T2"],
+            "Ngày giao dịch": ["2026-10-16", "2026-10-17"],
+            "Ghi có": ["1000", ""],
+            "Ghi nợ": ["", "250"],
+            "Cơ sở số tiền": ["POSTED_CASH", "POSTED_CASH"],
+        }
+    )
+
+    analysis = analyze_mapping(
+        frame,
+        BANK_REQUIRED,
+        feed="bank_transactions",
+        required_fields=BANK_REQUIRED,
+    )
+
+    specification = analysis.selected_transformations["cash_movement"]
+    assert specification == {
+        "type": "SPLIT_CREDIT_DEBIT",
+        "credit_column": "Ghi có",
+        "debit_column": "Ghi nợ",
+    }
+    for target in ("posted_amount", "direction"):
+        suggestion = _suggestion(analysis, target)
+        assert suggestion.status == "auto-selected"
+        assert suggestion.transformation == specification
+        assert suggestion.source_column is None

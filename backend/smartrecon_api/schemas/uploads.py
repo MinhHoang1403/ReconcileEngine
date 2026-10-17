@@ -5,6 +5,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 from smartrecon.domain.statuses import Currency
+from smartrecon.ingest.mapping import TRANSFORMATION_VERSION
 
 
 class MappingRequest(BaseModel):
@@ -18,6 +19,12 @@ class MappingRequest(BaseModel):
     order_defaults: dict[str, str] = Field(default_factory=lambda: {"order_status": "ELIGIBLE"})
     bank_defaults: dict[str, str] = Field(default_factory=dict)
     confirmed_structure: bool = False
+    order_date_format: str | None = None
+    bank_date_format: str | None = None
+    order_transformations: dict[str, dict[str, Any]] = Field(default_factory=dict)
+    bank_transformations: dict[str, dict[str, Any]] = Field(default_factory=dict)
+    transformation_version: str = TRANSFORMATION_VERSION
+    confirmed_ambiguities: tuple[str, ...] = ()
 
 
 class ExclusionRequest(BaseModel):
