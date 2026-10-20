@@ -100,6 +100,8 @@ Hai file JSON trong `reports/` là runtime evidence theo máy và không đượ
 
 ## Tài liệu vận hành và nghiệm thu
 
+Nhánh `research/import-reconciliation` dùng worktree và Docker project `smartrecon_lab` riêng để nghiên cứu. Website lab ở `http://localhost:5174`, API lab ở `http://localhost:8002`; hệ thống chính 5173/8000 được giữ nguyên. Cấu hình, audit read-only và backup/drill có kiểm tra tính nhất quán được mô tả trong `docs/DEPLOYMENT.md`. Không chạy lệnh update/migration/stop đối với project chính từ worktree nghiên cứu.
+
 - `docs/API_CONTRACT.md`: endpoints, DTO, mã lỗi, pagination và an toàn upload/export.
 - `docs/SMART_IMPORT_GUIDE.md`: cách nhận diện cấu trúc, xác nhận mapping, preview và quản lý import profile.
 - `docs/OPERATIONS.md`: hướng dẫn Windows/PowerShell, Docker Desktop/WSL2, restart và chẩn đoán.

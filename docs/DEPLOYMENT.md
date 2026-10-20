@@ -91,19 +91,36 @@ Backup phải bao gồm cả PostgreSQL lẫn artifact volume. Lệnh sau tạo 
 
 ```powershell
 $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
-uv run python scripts/backup_restore.py backup "reports/backups/$stamp" --run-id <run-id-da-luu>
+uv run python scripts/backup_restore.py backup "reports/backups/$stamp" --project smartrecon_lab --pause-lab-writes --base-url http://127.0.0.1:8002 --run-id <run-id-da-luu>
 uv run python scripts/backup_restore.py restore-drill "reports/backups/$stamp"
 ```
 
 Trên Linux thay biến PowerShell bằng đường dẫn timestamp tương đương. Restore drill:
 
-- xác minh checksum trước khi restore;
+- xác minh checksum dump và SHA-256 của từng artifact trước khi restore;
 - tạo Compose project, database volume, artifact volume và cổng ngẫu nhiên riêng;
 - restore bằng `pg_restore --clean --if-exists` chỉ vào database thử độc lập;
 - kiểm tra lại run/revision, audit history, allocation count/tổng tiền, KPI, conservation và tạo lại XLSX;
-- xóa duy nhất project thử có tên `smartrecon_restore_<random>` sau khi đạt.
+- dừng project thử có tên `smartrecon_restore_<random>` sau khi đạt và giữ volumes để kiểm tra lại.
 
-Script không ghi đè stack hoặc named volumes hiện tại. `--keep` chỉ dành cho điều tra có kiểm soát; người vận hành phải tự quản lý tài nguyên thử được giữ lại. Chuyển bản backup tới storage mã hóa, giới hạn truy cập và áp dụng retention của tổ chức vì raw files có thể chứa dữ liệu tài chính.
+Nhánh nghiên cứu yêu cầu project rõ ràng cho mọi lệnh Compose. Script chỉ tự dừng writer đối với `smartrecon_lab` hoặc project restore đã được kiểm tra; từ chối dừng hệ thống chính. Nó xác minh URL đúng cổng backend, volume thuộc project và chỉ có một application writer. Backend lab được drain/dừng trước `pg_dump` và copy artifacts, rồi khởi động lại trong `finally`. Phiên DB khác còn tồn tại sẽ làm backup thất bại. Đây là khoảng không ghi được thiết lập ở lab; script không tuyên bố backup DB/artifacts online là nguyên tử.
+
+Mỗi backup giữ image tags riêng cùng image IDs. Restore kiểm tra IDs rồi dùng `--no-build --pull never`; không âm thầm thay source/image khi bản cũ không còn. Giữ cả các image backup nếu cần phục hồi. `--keep` giữ project drill đang chạy; mặc định dừng nhưng giữ containers/volumes/images. `--output` lưu JSON nghiệm thu ngoài Git. Backup hệ thống chính cần maintenance window và phê duyệt riêng; các lệnh tự dừng hiện bị chặn. Chuyển bản backup tới storage mã hóa, giới hạn truy cập và áp dụng retention của tổ chức vì raw files có thể chứa dữ liệu tài chính.
+
+## Môi trường nghiên cứu độc lập
+
+Mã thử nghiệm nằm trong `C:\Work\ReconcileEngine-Lab`, nhánh `research/import-reconciliation`; workspace và project chính `reconcileengine` giữ nguyên. Khởi tạo từ worktree riêng:
+
+```powershell
+uv run python scripts/lab_environment.py initialize
+docker compose --project-name smartrecon_lab -f compose.yaml -f compose.lab.yaml config --quiet
+docker compose --project-name smartrecon_lab -f compose.yaml -f compose.lab.yaml build backend frontend
+docker compose --project-name smartrecon_lab -f compose.yaml -f compose.lab.yaml up --no-build -d
+```
+
+`initialize` tạo `.env` bị ignore, mật khẩu ngẫu nhiên riêng và image tags lab; từ chối ghi đè file đã có hoặc chạy trên `main`. Website lab ở `127.0.0.1:5174`, API ở `127.0.0.1:8002` (8001 đã được ShopQuery sử dụng). PostgreSQL không publish. Backend dùng `/artifacts/lab` trên `smartrecon_lab_artifacts_data`; database ở `smartrecon_lab_pg_data`; network `smartrecon_lab_default`. Không dùng external volume, bind mount source hoặc container_name.
+
+`lab_environment.py inventory --project ... --directory ... --api-url ... --output ...` chỉ đọc trạng thái. Nó lưu container/image/mount/network/port, hash từng bảng DB, fingerprint toàn bộ artifact files và ba run mẫu. `compare_inventories` đối chiếu trước/sau để phát hiện thay đổi ở hệ thống chính và volume/network dùng chung. JSON chi tiết nằm trong `reports/lab/`, không commit. Chỉ mở website chính và các endpoint GET không phát sinh export trong quá trình kiểm tra chính; mọi upload/run/review/browser smoke chạy ở lab.
 
 ## Restart, cập nhật và rollback ứng dụng
 

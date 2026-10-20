@@ -1,5 +1,33 @@
 # Báo cáo nghiệm thu kỹ thuật
 
+## Môi trường nghiên cứu độc lập — Checkpoint A, 2026-10-20
+
+Baseline source: `4dfd62e3bf8289477e291463f5afa4b41c0505d4`. Worktree chính ở `C:\Work\ReconcileEngine`, nhánh `main`, chỉ có `a_website_first/` untracked được giữ nguyên. Worktree nghiên cứu ở `C:\Work\ReconcileEngine-Lab`, nhánh `research/import-reconciliation`. Không cập nhật/migrate/restart stack chính và không push `main`.
+
+Audit read-only: project chính `reconcileengine`, frontend/backend ở 5173/8000, PostgreSQL 17.11, Alembic `20261017_04`; Docker 29.7.2, Compose 5.5.0, host Python 3.12.14 và Node 24.19.0. Ổ C còn khoảng 199 GiB, Docker filesystem còn 883 GiB tại lần đo đầu. Chính có 81 upload sessions, 70 runs, 111 revisions, 41 review actions, 10.319 allocation edges, 536 artifact manifest rows; 539 artifact files/37.369.406 bytes. Hash nội dung các bảng và artifacts được giữ ở `reports/lab/main-before.json`.
+
+Lab dùng project `smartrecon_lab`, frontend 5174 và backend 8002; 8001 đang thuộc `shopquery-ai` nên không dùng. Volumes `smartrecon_lab_pg_data` và `smartrecon_lab_artifacts_data`; network `smartrecon_lab_default`; database user/password riêng, image tags `smartrecon-*:lab-4dfd62e3bf82`. Không có bind source, external volume, container_name hoặc cổng PostgreSQL trên host. Ba service healthy; migration exit 0.
+
+Baseline trước sửa ứng dụng: 132 Python tests pass (60,45 s khi chạy đồng thời build), 19 frontend tests pass, frontend lint/build pass. Ba regression ban đầu tái hiện thiếu project scope, thiếu artifact checksum và thiếu guard dừng main; cả ba fail trước sửa và pass sau sửa. Bổ sung ca từ chối image backup bị đổi tag trước khi tạo tài nguyên. Không thay business logic.
+
+Lab run `08adeddc-c6b3-4e1a-bf81-ff41d23cadbe` chạy concurrency thật: `[409,200]`, revision 3, ba audit actions, idempotent retry đúng, dependency/stale/M:N đều trả đúng lỗi. Conservation đúng ở revisions 0–3; Excel 57.361 bytes khớp KPI.
+
+Backup hợp lệ tại `reports/backups/lab-consistent-20261020`: dump 77.977 bytes, SHA-256 `f4a71c12e852cf2bca095766e33a560c9695f650abb10f6134a2a223884d4bd4`; 20 artifact files/2.114.666 bytes, checksum từng file và audit-history hash. Khoảng không ghi chỉ được thiết lập ở lab bằng dừng writer sau drain và xác minh không còn client DB khác. Restore `smartrecon_restore_2f5c7e1f5d` phục hồi đúng revision 3/ba actions/92 allocation edges/66.531.000 VND/conservation true; XLSX tạo lại 57.360 bytes. Project drill được dừng, volumes/images được giữ nguyên.
+
+Drill sau rebuild từng phát hiện image ID không còn phân giải khi mutable tag bị thay: đã sửa bằng backup-specific tags, kiểm tra image IDs và restore `--no-build --pull never`, rồi chạy lại đạt. Không che lỗi bằng build source mới. Một bản sao synthetic khác `smartrecon_restore_d8ad7932d2` đã thử Alembic downgrade `20261017_04 -> 20261015_03` và upgrade lại head; chỉ tác động bảng profile rỗng của bản sao. Không migration DB chính.
+
+Browser lab desktop 1440×900 chạy trọn upload demo/Health/run/dashboard/XLSX/review approve/undo/reopen, conservation true, không lỗi console/runtime/network. Run browser `641853da-330c-4aa5-9813-1c7fba9c06aa`, XLSX ban đầu 56.956 bytes; ảnh tại `reports/lab/browser/`. Đã rebuild cả hai image lab và restart/recreate backend/frontend lab, không thay image tags hay containers chính.
+
+Sau toàn bộ thao tác lab, so sánh trước/sau đạt cả tám kiểm tra: DB chính không đổi theo nội dung từng bảng, artifacts chính không đổi, ba sample runs/KPI/checksum không đổi, container/image chính không đổi, hai health endpoint OK, volumes và networks không giao nhau. Artifact fingerprint chính: `cbf05d2a1d4b26fa1843e664bf03b8d846f867cf7c09ea1b6d06e03197c03984`.
+
+Dataset demo orders SHA-256 `bd450aa26b38492a34a2ff8e3c749c860658a5fadc3701e3e319ff808d45310a`, bank `6bcfc5907ec1b1303868801b102dcfbf9a32d2e579abafcedebff1ca222e02b4`, truth edges `9bb711b8e35e70651ea1042ad73277fedb1e76e504d5bb798b736d686486dee3`. Ngoài Git có `a_website_first/`: 606 OMS rows, 279 bank rows, 133 Shopee rows và 81 TikTok rows. Chưa thấy bộ 380/362 và chưa dùng bộ local này làm truth cho thuật toán.
+
+Regression sau sửa: Ruff lint/format đạt (109 files), Python `136 passed` trong 20,73 s, chỉ còn hai warning môi trường đã biết. Restore cuối `smartrecon_restore_dfc4625d27` cũng đạt kiểm tra từng artifact byte, audit hash và toàn bộ KPI/revision; XLSX 57.361 bytes. Hai website chính/lab đều HTTP 200.
+
+Gate A: đạt kiểm tra cách ly/backup/restore/baseline. Chưa nghiệm thu B–G và chưa có phê duyệt cutover. Backup chính online, usability với người dùng thật và các phương pháp nghiên cứu thuộc checkpoint sau chưa được coi là đã thực hiện.
+
+## Các đợt nghiệm thu trước
+
 Ngày kiểm tra gần nhất: 2026-10-16. Môi trường: Windows/PowerShell, Docker Engine 29.7.2, Compose 5.5, Python 3.12 qua `uv`, Node 24.
 
 ## Kết quả tự động

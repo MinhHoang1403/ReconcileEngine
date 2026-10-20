@@ -1,5 +1,23 @@
 # Báo cáo nghiệm thu hệ thống
 
+## Đợt nghiên cứu trên môi trường độc lập — 2026-10-20
+
+Yêu cầu mới được triển khai trên nhánh `research/import-reconciliation`, worktree `C:\Work\ReconcileEngine-Lab`, lấy baseline `4dfd62e3bf8289477e291463f5afa4b41c0505d4`. Kết luận nghiệm thu cũ bên dưới chỉ áp dụng cho baseline, không chứng nhận các cải tiến đang nghiên cứu.
+
+| Checkpoint của đợt nghiên cứu | Trạng thái |
+|---|---|
+| A — Lab độc lập và backup/restore | Đã có bằng chứng cách ly, restore và baseline; xem QA_REPORT |
+| B — Auto mapping, Valentine/COMA và validation | Chưa nghiệm thu |
+| C — Matching, Splink/CP-SAT và đối chứng | Chưa nghiệm thu |
+| D — Classification và residual theo cấp nghiệp vụ | Chưa nghiệm thu |
+| E — Workflow gần một nút và usability | Chưa nghiệm thu |
+| F — Đối chứng tổng hợp/regression | Chưa nghiệm thu |
+| G — Diễn tập cutover/rollback và quyết định GO/NO-GO | Chưa đủ điều kiện đề xuất |
+
+Hệ thống chính giữ nguyên source/branch, container/image IDs, DB table hashes, artifact fingerprint và các sample run/KPI. Lab ở 5174/8002 với storage/network riêng; cổng 8001 thuộc project khác. Dữ liệu dùng cho backup/drill là synthetic. Script từ chối tự dừng writer của project chính; cutover và maintenance chính vẫn cần phê duyệt riêng. Không push `main`.
+
+Nguồn bằng chứng thực thi nằm trong `reports/lab/` và `reports/backups/lab-consistent-20261020/` ở worktree nghiên cứu; chúng bị Git ignore. Chi tiết lệnh, kết quả, sự cố image tag đã tái hiện và cách sửa nằm tại `QA_REPORT.md`/`DEPLOYMENT.md`.
+
 Ngày nghiệm thu: 2026-10-16
 
 Commit ứng dụng được nghiệm thu clean-clone: `454cad3e3bc7d66685879ca5830fa610bb891e38`

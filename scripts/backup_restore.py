@@ -17,10 +17,12 @@ import urllib.request
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 ROOT = Path(__file__).resolve().parents[1]
 RUN_ID_PATTERN = re.compile(r"^[0-9a-f-]{36}$")
 RESTORE_PROJECT_PATTERN = re.compile(r"^smartrecon_restore_[0-9a-f]{10}$")
+LAB_PROJECT_PATTERN = re.compile(r"^smartrecon_(lab|restore_[0-9a-f]{10})$")
 
 
 def _command(
@@ -50,9 +52,10 @@ def _compose(
     project: str | None = None,
     environment: dict[str, str] | None = None,
 ) -> str:
-    command = ["docker", "compose"]
-    if project:
-        command.extend(["--project-name", project])
+    if not project or not re.fullmatch(r"[a-z0-9][a-z0-9_-]*", project):
+        raise ValueError("An explicit valid Compose project is required")
+    command = ["docker", "compose", "--project-directory", str(ROOT), "--file", str(ROOT / "compose.yaml")]
+    command.extend(["--project-name", project])
     command.extend(arguments)
     return _command(command, environment=environment)
 
@@ -65,8 +68,9 @@ def _database_scalar(sql: str, *, project: str | None = None, environment: dict[
             "db",
             "sh",
             "-c",
-            f'psql --no-psqlrc --tuples-only --no-align --username="$POSTGRES_USER" '
-            f'--dbname="$POSTGRES_DB" --command={json.dumps(sql)}',
+            'exec psql -X -qAt --username="$POSTGRES_USER" --dbname="$POSTGRES_DB" --command="$1"',
+            "sh",
+            sql,
         ],
         project=project,
         environment=environment,
@@ -115,15 +119,40 @@ def _artifact_stats(directory: Path) -> tuple[int, int]:
     return len(files), sum(path.stat().st_size for path in files)
 
 
+def _artifact_inventory(directory: Path) -> dict[str, dict[str, Any]]:
+    """Checksum every copied file, not just the database dump or an aggregate byte count."""
+    return {
+        path.relative_to(directory).as_posix(): {"sha256": _sha256(path), "byte_size": path.stat().st_size}
+        for path in sorted(directory.rglob("*"))
+        if path.is_file()
+    }
+
+
+def _verify_artifacts(directory: Path, expected: dict[str, dict[str, Any]]) -> None:
+    if _artifact_inventory(directory) != expected:
+        raise AssertionError("Backup artifact inventory differs from the manifest")
+
+
+def _pin_image(container: dict[str, Any], service: str) -> dict[str, str]:
+    """Retain an image under a backup-specific tag before mutable lab tags are rebuilt."""
+    image_id = container["Image"]
+    inspected = json.loads(_command(["docker", "image", "inspect", image_id]))[0]
+    if inspected["Id"] != image_id:
+        raise AssertionError("Source image identity differs from the running container")
+    reference = f"smartrecon-{service}:backup-{secrets.token_hex(8)}"
+    _command(["docker", "image", "tag", image_id, reference])
+    return {"reference": reference, "id": image_id}
+
+
 def _free_port() -> int:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listener:
         listener.bind(("127.0.0.1", 0))
         return int(listener.getsockname()[1])
 
 
-def _validated_run_id(run_id: str | None) -> str:
+def _validated_run_id(run_id: str | None, *, project: str) -> str:
     selected = run_id or _database_scalar(
-        "SELECT id FROM runs ORDER BY completed_at DESC NULLS LAST, created_at DESC LIMIT 1;"
+        "SELECT id FROM runs ORDER BY completed_at DESC NULLS LAST, created_at DESC LIMIT 1;", project=project
     )
     selected = selected.strip()
     if not RUN_ID_PATTERN.fullmatch(selected):
@@ -144,54 +173,120 @@ def _snapshot(base_url: str, run_id: str) -> dict[str, Any]:
         "semantic_checksum": run["semantic_checksum"],
         "kpis": dashboard["kpis"],
         "history_total": history["total"],
+        "history_sha256": hashlib.sha256(json.dumps(history["items"], sort_keys=True).encode()).hexdigest(),
     }
 
 
-def create_backup(output_directory: Path, *, run_id: str | None, base_url: str) -> Path:
-    """Create one PostgreSQL/artifact backup with a verification manifest."""
+def create_backup(
+    output_directory: Path,
+    *,
+    run_id: str | None,
+    base_url: str,
+    project: str,
+    pause_lab_writes: bool = False,
+) -> Path:
+    """Back up a lab with its sole application writer stopped; never pause the main system."""
+    if not pause_lab_writes or not LAB_PROJECT_PATTERN.fullmatch(project):
+        raise ValueError("Consistent backup requires explicit lab write pause; main shutdown is not authorized")
+    backend_id = _compose(["ps", "--quiet", "backend"], project=project)
+    backend = json.loads(_command(["docker", "inspect", backend_id]))[0]
+    if backend["Config"]["Labels"]["com.docker.compose.project"] != project:
+        raise ValueError("Backend does not belong to the requested lab project")
+    endpoint = urlsplit(base_url)
+    published = backend["HostConfig"]["PortBindings"].get("8000/tcp", [])
+    if endpoint.hostname not in {"127.0.0.1", "localhost"} or not any(
+        item["HostIp"] == "127.0.0.1" and int(item["HostPort"]) == endpoint.port for item in published
+    ):
+        raise ValueError("Verification URL must address the selected lab backend's loopback port")
+    artifact_root = next(
+        value.split("=", 1)[1] for value in backend["Config"]["Env"] if value.startswith("ARTIFACTS_PATH=")
+    )
+    artifact_mount = next(
+        mount
+        for mount in backend["Mounts"]
+        if artifact_root == mount["Destination"] or artifact_root.startswith(mount["Destination"] + "/")
+    )
+    if artifact_mount["Type"] != "volume" or not artifact_mount["Name"].startswith(project + "_"):
+        raise ValueError("Backup lab must own its artifact volume")
+    volume_users = _command(["docker", "ps", "--filter", "volume=" + artifact_mount["Name"], "--quiet"]).splitlines()
+    if len(volume_users) != 1 or not backend_id.startswith(volume_users[0]):
+        raise ValueError("Artifact volume must have exactly one running application writer")
+    frontend_id = _compose(["ps", "--quiet", "frontend"], project=project)
+    frontend = json.loads(_command(["docker", "inspect", frontend_id]))[0]
+    images = {"backend": _pin_image(backend, "backend"), "frontend": _pin_image(frontend, "frontend")}
     output_directory = output_directory.resolve()
     output_directory.mkdir(parents=True, exist_ok=False)
     artifact_directory = output_directory / "artifacts"
     artifact_directory.mkdir()
     dump_path = output_directory / "postgres.dump"
 
-    selected_run_id = _validated_run_id(run_id)
+    selected_run_id = _validated_run_id(run_id, project=project)
     source = _snapshot(base_url.rstrip("/"), selected_run_id)
     revision = int(source["effective_revision"])
     allocation_row = _database_scalar(
         "SELECT count(*) || '|' || COALESCE(sum(allocated_cash_minor), 0) "
-        f"FROM allocation_edges WHERE run_id = '{selected_run_id}' AND revision = {revision};"
+        f"FROM allocation_edges WHERE run_id = '{selected_run_id}' AND revision = {revision};",
+        project=project,
     )
     allocation_count, allocation_total = (int(value) for value in allocation_row.split("|"))
 
-    container_dump = "/tmp/smartrecon-postgres-backup.dump"
-    _compose(
-        [
-            "exec",
-            "-T",
-            "db",
-            "sh",
-            "-c",
-            'pg_dump --format=custom --no-owner --no-acl --username="$POSTGRES_USER" '
-            f'--dbname="$POSTGRES_DB" --file={container_dump}',
-        ]
-    )
+    # SIGTERM drains the single Uvicorn worker before copying either store. The scope
+    # guard above deliberately forbids stopping an operator's main deployment.
+    _compose(["stop", "--timeout", "60", "backend"], project=project)
+    container_dump = f"/tmp/smartrecon-backup-{secrets.token_hex(8)}.dump"
     try:
-        _compose(["cp", f"db:{container_dump}", str(dump_path)])
+        stopped = json.loads(_command(["docker", "inspect", backend_id]))[0]
+        if stopped["State"]["Running"]:
+            raise AssertionError("Lab application writer did not stop")
+        active_connections = _database_scalar(
+            "SELECT count(*) FROM pg_stat_activity WHERE datname = current_database() "
+            "AND pid <> pg_backend_pid() AND backend_type = 'client backend';",
+            project=project,
+        )
+        if int(active_connections) != 0:
+            raise AssertionError("Other database clients remain; cannot establish a lab write-free interval")
+        current_revision = _database_scalar(
+            f"SELECT current_revision FROM runs WHERE id = '{selected_run_id}';", project=project
+        )
+        if int(current_revision) != revision:
+            raise AssertionError("Source revision changed while draining writes; retry backup")
+        _compose(
+            [
+                "exec",
+                "-T",
+                "db",
+                "sh",
+                "-c",
+                'pg_dump --format=custom --no-owner --no-acl --username="$POSTGRES_USER" '
+                f'--dbname="$POSTGRES_DB" --file={container_dump}',
+            ],
+            project=project,
+        )
+        _compose(["cp", f"db:{container_dump}", str(dump_path)], project=project)
+        _compose(["cp", f"backend:{artifact_root}/.", str(artifact_directory)], project=project)
     finally:
-        _compose(["exec", "-T", "db", "rm", "-f", container_dump])
-    _compose(["cp", "backend:/artifacts/.", str(artifact_directory)])
+        _compose(["exec", "-T", "db", "rm", "-f", container_dump], project=project)
+        _compose(["start", "backend"], project=project)
+        _wait_for_url(base_url.rstrip("/") + "/healthz")
 
     artifact_count, artifact_bytes = _artifact_stats(artifact_directory)
     manifest = {
         "created_at": datetime.now(UTC).isoformat(),
         "format": "smartrecon-backup",
+        "source_project": project,
+        "consistency": "single_application_writer_drained_and_stopped",
+        "images": images,
         "database": {
             "filename": dump_path.name,
             "sha256": _sha256(dump_path),
             "byte_size": dump_path.stat().st_size,
         },
-        "artifacts": {"directory": artifact_directory.name, "file_count": artifact_count, "byte_size": artifact_bytes},
+        "artifacts": {
+            "directory": artifact_directory.name,
+            "file_count": artifact_count,
+            "byte_size": artifact_bytes,
+            "files": _artifact_inventory(artifact_directory),
+        },
         "verification": {
             **source,
             "allocation_count": allocation_count,
@@ -218,6 +313,7 @@ def _restore_environment() -> tuple[dict[str, str], int, int]:
             "FRONTEND_PORT": str(frontend_port),
             "DEMO_MODE": "false",
             "CORS_ORIGINS": f"http://127.0.0.1:{frontend_port}",
+            "ARTIFACTS_PATH": "/artifacts",
         }
     )
     return environment, backend_port, frontend_port
@@ -231,11 +327,18 @@ def restore_drill(backup_directory: Path, *, keep: bool = False) -> dict[str, An
     artifact_directory = backup_directory / manifest["artifacts"]["directory"]
     if _sha256(dump_path) != manifest["database"]["sha256"]:
         raise AssertionError("PostgreSQL dump checksum does not match the manifest")
+    _verify_artifacts(artifact_directory, manifest["artifacts"]["files"])
 
     project = f"smartrecon_restore_{secrets.token_hex(5)}"
     if not RESTORE_PROJECT_PATTERN.fullmatch(project):
         raise AssertionError("Unsafe restore project name")
     environment, backend_port, frontend_port = _restore_environment()
+    for service in ("backend", "frontend"):
+        image = manifest["images"][service]
+        inspected = json.loads(_command(["docker", "image", "inspect", image["reference"]]))[0]
+        if inspected["Id"] != image["id"]:
+            raise AssertionError("Backup image tag no longer refers to the recorded image")
+        environment[f"{service.upper()}_IMAGE"] = image["reference"]
     api_url = f"http://127.0.0.1:{backend_port}"
     verification = manifest["verification"]
     run_id = str(verification["run_id"])
@@ -276,7 +379,7 @@ def restore_drill(backup_directory: Path, *, keep: bool = False) -> dict[str, An
                 environment=environment,
             )
 
-        _compose(["up", "-d", "backend"], project=project, environment=environment)
+        _compose(["up", "--no-build", "--pull", "never", "-d", "backend"], project=project, environment=environment)
         _wait_for_url(f"{api_url}/healthz")
         _compose(
             ["cp", f"{artifact_directory}{os.sep}.", "backend:/artifacts/"],
@@ -288,15 +391,30 @@ def restore_drill(backup_directory: Path, *, keep: bool = False) -> dict[str, An
             project=project,
             environment=environment,
         )
+        inventory_code = (
+            "import hashlib,json; from pathlib import Path; root=Path('/artifacts'); "
+            "print(json.dumps({p.relative_to(root).as_posix(): "
+            "{'sha256':hashlib.sha256(p.read_bytes()).hexdigest(),'byte_size':p.stat().st_size} "
+            "for p in root.rglob('*') if p.is_file()}))"
+        )
+        restored_files = json.loads(
+            _compose(
+                ["exec", "-T", "backend", "/app/.venv/bin/python", "-c", inventory_code],
+                project=project,
+                environment=environment,
+            )
+        )
+        if restored_files != manifest["artifacts"]["files"]:
+            raise AssertionError("Restored artifact bytes differ from the backup manifest")
         _compose(["restart", "backend"], project=project, environment=environment)
         _wait_for_url(f"{api_url}/healthz")
-        _compose(["up", "-d", "frontend"], project=project, environment=environment)
+        _compose(["up", "--no-build", "--pull", "never", "-d", "frontend"], project=project, environment=environment)
         _wait_for_url(f"http://127.0.0.1:{frontend_port}")
 
         restored = _snapshot(api_url, run_id)
         if restored != {
             key: verification[key]
-            for key in ("run_id", "effective_revision", "semantic_checksum", "kpis", "history_total")
+            for key in ("run_id", "effective_revision", "semantic_checksum", "kpis", "history_total", "history_sha256")
         }:
             raise AssertionError("Restored run metadata, KPI, or audit history differs from the source")
         allocation_row = _database_scalar(
@@ -328,11 +446,8 @@ def restore_drill(backup_directory: Path, *, keep: bool = False) -> dict[str, An
         if not keep:
             if not RESTORE_PROJECT_PATTERN.fullmatch(project):
                 raise AssertionError("Refusing to remove volumes for an unvalidated project name")
-            _compose(
-                ["down", "--volumes", "--remove-orphans"],
-                project=project,
-                environment=environment,
-            )
+            # Preserve restored volumes and images for inspection; no automated deletion.
+            _compose(["stop"], project=project, environment=environment)
 
 
 def main() -> None:
@@ -342,16 +457,30 @@ def main() -> None:
     backup_parser.add_argument("output_directory", type=Path)
     backup_parser.add_argument("--run-id")
     backup_parser.add_argument("--base-url", default="http://127.0.0.1:8000")
+    backup_parser.add_argument("--project", required=True)
+    backup_parser.add_argument("--pause-lab-writes", action="store_true")
     drill_parser = subparsers.add_parser("restore-drill")
     drill_parser.add_argument("backup_directory", type=Path)
     drill_parser.add_argument("--keep", action="store_true")
+    drill_parser.add_argument("--output", type=Path)
     arguments = parser.parse_args()
 
     if arguments.action == "backup":
-        manifest = create_backup(arguments.output_directory, run_id=arguments.run_id, base_url=arguments.base_url)
+        manifest = create_backup(
+            arguments.output_directory,
+            run_id=arguments.run_id,
+            base_url=arguments.base_url,
+            project=arguments.project,
+            pause_lab_writes=arguments.pause_lab_writes,
+        )
         print(json.dumps({"manifest": str(manifest)}, ensure_ascii=False))
     else:
-        print(json.dumps(restore_drill(arguments.backup_directory, keep=arguments.keep), ensure_ascii=False))
+        result = restore_drill(arguments.backup_directory, keep=arguments.keep)
+        encoded = json.dumps(result, ensure_ascii=False, indent=2)
+        if arguments.output:
+            arguments.output.parent.mkdir(parents=True, exist_ok=True)
+            arguments.output.write_text(encoded + "\n", encoding="utf-8")
+        print(encoded)
 
 
 if __name__ == "__main__":
