@@ -6,6 +6,8 @@ Inspection trả `suggested_mapping` tương thích nhưng không bổ sung alia
 
 ## Luồng chuẩn
 
+Inspection có thêm hai trường tương thích ngược: `automatic_mapping` là MappingConfig đầy đủ hoặc `null`; `automation_reasons` là danh sách mã cần xác nhận (structure/source/mapping/currency/money/date). Không có nghĩa đã chuẩn hóa hoặc đã tạo run. Client chỉ được tự gọi mapping/Health khi server cung cấp cấu hình này; vẫn phải đi qua chuẩn hóa toàn bộ dòng và Health Gate. Không suy separator từ `1.000`, không mặc định currency để bỏ câu hỏi, không tự acknowledge/exclude hoặc gửi `/api/runs`. Thiếu hai trường mới thì giữ luồng xác nhận thủ công.
+
 1. `POST /api/demo/datasets` hoặc `POST /api/uploads/inspect` để tạo upload session bất biến và nhận raw EDA/mapping gợi ý.
 2. Có thể gọi `POST /api/uploads/{session_id}/preview` nhiều lần để xem kết quả chuẩn hóa giới hạn mà không thay đổi session.
 3. `POST /api/uploads/{session_id}/mapping` để xác nhận mapping, chuẩn hóa và chạy Health Gate.

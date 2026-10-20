@@ -59,6 +59,8 @@ class InspectionResponse(BaseModel):
     mapping_suggestions: dict[str, Any]
     detected_structure: dict[str, Any]
     import_profile: dict[str, Any]
+    automatic_mapping: dict[str, Any] | None = None
+    automation_reasons: list[str] = Field(default_factory=list)
 
 
 class HealthResponse(BaseModel):

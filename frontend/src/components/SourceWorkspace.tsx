@@ -74,8 +74,8 @@ export function SourceWorkspace(props: Props) {
         <p className="eyebrow">ĐỐI SOÁT HAI NGUỒN · BẢO TOÀN TIỀN</p>
         <h1 id="source-title">Đối soát giao dịch tài chính</h1>
         <p>
-          Kết nối đơn hàng cần thu tiền với giao dịch thanh toán từ ngân hàng hoặc cổng thanh toán (PSP), kiểm tra chất lượng dữ liệu
-          và phân bổ tiền theo bằng chứng có thể truy vết.
+          Chọn dữ liệu đơn hàng và tiền đã nhận. Hệ thống tự kiểm tra, chỉ hỏi thêm khi chưa đủ thông tin
+          và đối chiếu theo bằng chứng có thể truy vết.
         </p>
       </div>
 
@@ -118,6 +118,7 @@ export function SourceWorkspace(props: Props) {
           <button className="primary upload-submit" type="submit" disabled={!canUpload}>
             {props.busy ? <><span className="spinner" aria-hidden="true" />Đang kiểm tra…</> : "Kiểm tra và xem trước"}
           </button>
+          {props.busy && <p role="status">Đang nhận diện và kiểm tra toàn bộ dữ liệu. Chưa chạy đối soát.</p>}
         </form>
 
         <aside className="source-aside" aria-label="Tùy chọn khác">

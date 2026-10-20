@@ -79,6 +79,8 @@ export type Inspection = {
     saved_profile: { id: string; name: string; schema_version: string; mapping_snapshot: MappingState } | null;
     applied: boolean;
   };
+  automatic_mapping?: MappingState | null;
+  automation_reasons?: string[];
 };
 
 export type NormalizedPreview = {

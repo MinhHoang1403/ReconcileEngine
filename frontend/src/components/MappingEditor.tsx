@@ -38,6 +38,8 @@ type Props = {
   onChange: (mapping: MappingState) => void;
   onValidityChange?: (valid: boolean) => void;
   suggestions: { orders: MappingAnalysis; bank_transactions: MappingAnalysis };
+  compact?: boolean;
+  showParsing?: boolean;
 };
 
 function mappingProblems(fields: FieldDefinition[], values: Record<string, string>, transformations: MappingState["bank_transformations"] = {}) {
@@ -101,7 +103,7 @@ function Fields({ fields, columns, values, sampleRows, onField, suggestions, tra
   );
 }
 
-function FeedMapping({ title, description, fields, columns, values, sampleRows, onField, suggestions, transformations, onManualCash }: {
+function FeedMapping({ title, description, fields, columns, values, sampleRows, onField, suggestions, transformations, onManualCash, compact }: {
   title: string;
   description: string;
   fields: FieldDefinition[];
@@ -112,10 +114,14 @@ function FeedMapping({ title, description, fields, columns, values, sampleRows, 
   suggestions: MappingSuggestion[];
   transformations?: MappingState["bank_transformations"];
   onManualCash?: () => void;
+  compact?: boolean;
 }) {
   const required = fields.filter((field) => field.required);
   const optional = fields.filter((field) => !field.required);
   const problems = mappingProblems(fields, values, transformations);
+  const unresolved = required.filter((field) => suggestions.find((item) => item.canonical_target === field.key)?.status !== "auto-selected"
+    || (!values[field.key] && !(["posted_amount", "direction"].includes(field.key) && transformations?.cash_movement)));
+  const known = required.filter((field) => !unresolved.includes(field));
   return (
     <article className="surface mapping-card">
       <div className="surface-heading compact"><div><div><h2>{title}</h2><p>{description}</p></div></div></div>
@@ -125,7 +131,11 @@ function FeedMapping({ title, description, fields, columns, values, sampleRows, 
         </div>
       )}
       <h3 className="mapping-subtitle">Trường bắt buộc</h3>
-      <Fields fields={required} columns={columns} values={values} sampleRows={sampleRows} onField={onField} suggestions={suggestions} transformations={transformations} onManualCash={onManualCash} />
+      {compact && <p className="optional-note">{known.length} trường đã được nhận diện. Chỉ cần xác nhận các mục còn lại.</p>}
+      <Fields fields={compact ? unresolved : required} columns={columns} values={values} sampleRows={sampleRows} onField={onField} suggestions={suggestions} transformations={transformations} onManualCash={onManualCash} />
+      {compact && known.length > 0 && <details className="optional-fields"><summary>Xem hoặc sửa các trường đã nhận diện ({known.length})</summary>
+        <Fields fields={known} columns={columns} values={values} sampleRows={sampleRows} onField={onField} suggestions={suggestions} transformations={transformations} onManualCash={onManualCash} />
+      </details>}
       <details className="optional-fields">
         <summary>Trường bổ sung ({optional.length})</summary>
         <p className="optional-note">Các trường bổ sung làm rõ bằng chứng hoặc phục vụ hiển thị. Trường ghi “Hỗ trợ” không đủ để tự xác nhận giao dịch.</p>
@@ -135,7 +145,7 @@ function FeedMapping({ title, description, fields, columns, values, sampleRows, 
   );
 }
 
-export function MappingEditor({ mapping, ordersEda, bankEda, onChange, onValidityChange, suggestions }: Props) {
+export function MappingEditor({ mapping, ordersEda, bankEda, onChange, onValidityChange, suggestions, compact = false, showParsing = false }: Props) {
   const valid = useMemo(() => {
     const orderProblems = mappingProblems(orderFields, mapping.order_columns);
     const bankProblems = mappingProblems(bankFields, mapping.bank_columns, mapping.bank_transformations);
@@ -145,7 +155,8 @@ export function MappingEditor({ mapping, ordersEda, bankEda, onChange, onValidit
   useEffect(() => onValidityChange?.(valid), [onValidityChange, valid]);
   return (
     <div className="stack">
-      <article className="surface mapping-settings">
+      <details className="surface mapping-settings" open={!compact || showParsing}>
+        <summary>Cách đọc tiền, ngày và loại tiền</summary>
         <div className="surface-heading compact"><div><div><h2>Cách đọc dữ liệu nguồn</h2><p>Thiết lập cách diễn giải tiền, nguồn và ngày tháng. Hệ thống không tự tạo mã, ngày hoặc số tiền còn thiếu.</p></div></div></div>
         <div className="settings-row">
           <label>
@@ -175,8 +186,16 @@ export function MappingEditor({ mapping, ordersEda, bankEda, onChange, onValidit
             </select>
           </label>
         </div>
+        <div className="settings-row">
+          <label><span>Dấu thập phân</span><select value={mapping.decimal_separator} onChange={(event) => onChange({ ...mapping, decimal_separator: event.target.value, thousand_separator: mapping.thousand_separator === event.target.value ? null : mapping.thousand_separator })}>
+            <option value=".">Dấu chấm (.)</option><option value=",">Dấu phẩy (,)</option>
+          </select></label>
+          <label><span>Dấu phân cách hàng nghìn</span><select value={mapping.thousand_separator ?? ""} onChange={(event) => onChange({ ...mapping, thousand_separator: event.target.value || null })}>
+            <option value="">Không dùng</option><option value="," disabled={mapping.decimal_separator === ","}>Dấu phẩy (,)</option><option value="." disabled={mapping.decimal_separator === "."}>Dấu chấm (.)</option><option value=" ">Khoảng trắng</option>
+          </select></label>
+        </div>
         <div className="defaults-note"><strong>Giá trị mặc định được áp dụng rõ ràng</strong><span>Trạng thái đơn hàng: ELIGIBLE (đủ điều kiện đối soát). Loại tiền: {mapping.currency}. Không có mặc định giả cho mã, ngày, số tiền, chiều giao dịch hoặc cơ sở số tiền.</span></div>
-      </article>
+      </details>
       <div className="mapping-columns">
         <FeedMapping
           title="Danh sách đơn hàng cần thu tiền"
@@ -186,6 +205,7 @@ export function MappingEditor({ mapping, ordersEda, bankEda, onChange, onValidit
           values={mapping.order_columns}
           sampleRows={ordersEda.sample_rows}
           suggestions={suggestions.orders.suggestions}
+          compact={compact}
           onField={(field, source) => onChange({ ...mapping, order_columns: { ...mapping.order_columns, [field]: source } })}
         />
         <FeedMapping
@@ -196,6 +216,7 @@ export function MappingEditor({ mapping, ordersEda, bankEda, onChange, onValidit
           values={mapping.bank_columns}
           sampleRows={bankEda.sample_rows}
           suggestions={suggestions.bank_transactions.suggestions}
+          compact={compact}
           transformations={mapping.bank_transformations}
           onManualCash={() => {
             const next = { ...mapping.bank_transformations };

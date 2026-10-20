@@ -49,8 +49,11 @@ def test_import_profile_crud_reuse_and_schema_drift_protection(tmp_path: Path, m
             )
             assert "expected_amount" not in ambiguous["suggested_mapping"]["order_columns"]
             assert "expected_amount" not in ambiguous["mapping_suggestions"]["orders"]["selected_mapping"]
+            assert ambiguous["automatic_mapping"] is None
             inspection = _inspect(client)
             assert inspection["import_profile"]["applied"] is False
+            assert inspection["automatic_mapping"] is None
+            assert "CURRENCY_REQUIRES_CONFIRMATION" in inspection["automation_reasons"]
             mapping = {
                 **inspection["suggested_mapping"],
                 "currency": "VND",
@@ -99,6 +102,7 @@ def test_import_profile_crud_reuse_and_schema_drift_protection(tmp_path: Path, m
             assert saved["id"] == profile["id"]
             assert saved["mapping_snapshot"]["import_profile_id"] == profile["id"]
             assert reused["suggested_mapping"] == inspection["suggested_mapping"]
+            assert reused["automatic_mapping"]["import_profile_id"] == profile["id"]
 
             renamed = client.patch(
                 f"/api/import-profiles/{profile['id']}",
@@ -120,6 +124,7 @@ def test_import_profile_crud_reuse_and_schema_drift_protection(tmp_path: Path, m
             )
             assert semantic_drift["import_profile"]["applied"] is False
             assert semantic_drift["import_profile"]["saved_profile"] is None
+            assert semantic_drift["automatic_mapping"] is None
 
             deleted = client.delete(f"/api/import-profiles/{profile['id']}")
             assert deleted.status_code == 204

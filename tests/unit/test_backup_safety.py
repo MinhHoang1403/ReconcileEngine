@@ -72,3 +72,12 @@ def test_matching_mutation_qa_refuses_non_lab_urls() -> None:
     for address in ("http://localhost:8000", "http://127.0.0.1:5173", "https://example.org:8002"):
         with pytest.raises(ValueError, match="restricted"):
             exercise(address)
+
+
+def test_import_browser_qa_refuses_main_before_creating_files(tmp_path: Path) -> None:
+    from scripts.qa_import_workflow import exercise
+
+    for address in ("http://localhost:5173", "http://127.0.0.1:8000", "https://example.org:5174"):
+        with pytest.raises(ValueError, match="restricted"):
+            exercise(address, 390, 844, tmp_path / "not-created", ["csv"])
+    assert not (tmp_path / "not-created").exists()

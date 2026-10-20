@@ -8,6 +8,8 @@ Raw file là bất biến. Mỗi canonical row phải giữ file SHA-256, số d
 
 ## Nhận diện cấu trúc và chuẩn hóa thích ứng
 
+Import tự động chỉ là một cách đưa cấu hình đủ chứng cứ vào normalizer hiện có, không phải quyền xác nhận giao dịch. Cấu hình chưa có profile phải có currency tường minh trên cả hai feed, chỉ một VND/BRL qua **toàn bộ dòng**, nguồn/cấu trúc/cột đủ rõ và tiền không đòi đoán dấu phân cách. Cả tiền và currency được kiểm tra ngoài sample EDA. Thiếu chứng cứ trả câu hỏi; profile đã xác nhận phải qua kiểm tra toàn dòng trước khi tái sử dụng. Health BLOCKING/warning, raw hashes và lineage không đổi.
+
 Reader chỉ xét UTF-8/UTF-8-SIG cho CSV và các delimiter cho phép `,`, `;`, tab, `|`. XLSX được đọc theo sheet và vùng tiêu đề đã phát hiện; giới hạn kích thước ZIP, số sheet, dòng và cột vẫn áp dụng. Kết quả inspection lưu sheet, delimiter, dòng/độ sâu header, các phương án cạnh tranh, lý do chọn và chính xác số dòng nguồn. Dòng trống có thể bỏ qua; footer/tổng cộng không được âm thầm bỏ mà phải đi qua chuẩn hóa/Health Gate.
 
 Mapping suggestion là heuristic giải thích được, không phải xác suất. Mỗi đề xuất có cột nguồn hoặc transformation, điểm heuristic, mức tin cậy, lý do, ứng viên cạnh tranh và mẫu trước/sau. Ngày ở chế độ `AUTO` chỉ nhận ISO/năm-trước hoặc ngày-tháng không mơ hồ; trường hợp như `01/02/2026` phải chọn format rõ ràng. Hai feed có thể dùng format ngày riêng.

@@ -286,7 +286,7 @@ export function Dashboard({
           <article className="surface analytics-card">
             <h3>Phân bố phần tiền chưa giải quyết</h3>
             <p>Ngưỡng theo tỷ lệ trên tổng phải thu {formatMoney(analytics.residual_distribution.denominator_minor, currency)}; hai sổ được trình bày riêng để tránh cộng trùng.</p>
-            <table><thead><tr><th>Mức</th><th>Đơn còn phải thu</th><th>Tiền ngân hàng chưa phân bổ</th></tr></thead><tbody>{analytics.residual_distribution.order_outstanding.map((bucket, index) => <tr key={bucket.bucket}><td>{residualBucket[bucket.bucket] ?? bucket.bucket}</td><td>{bucket.count} · {formatMoney(bucket.amount_minor, currency)}</td><td>{analytics.residual_distribution.bank_unapplied[index]?.count ?? 0} · {formatMoney(analytics.residual_distribution.bank_unapplied[index]?.amount_minor ?? 0, currency)}</td></tr>)}</tbody></table>
+            <div className="table-wrap"><table><thead><tr><th>Mức</th><th>Đơn còn phải thu</th><th>Tiền ngân hàng chưa phân bổ</th></tr></thead><tbody>{analytics.residual_distribution.order_outstanding.map((bucket, index) => <tr key={bucket.bucket}><td>{residualBucket[bucket.bucket] ?? bucket.bucket}</td><td>{bucket.count} · {formatMoney(bucket.amount_minor, currency)}</td><td>{analytics.residual_distribution.bank_unapplied[index]?.count ?? 0} · {formatMoney(analytics.residual_distribution.bank_unapplied[index]?.amount_minor ?? 0, currency)}</td></tr>)}</tbody></table></div>
           </article>
           <article className="surface analytics-card">
             <h3>Nguyên nhân ngoại lệ phổ biến</h3>

@@ -2,6 +2,14 @@
 
 ## Phạm vi và giao thức
 
+### Workflow nhập liệu — Checkpoint E, 2026-10-20
+
+Giả thuyết: bỏ bước xác nhận lại cột đã có đủ chứng cứ sẽ giảm thao tác bắt buộc, không giảm guard tiền/ngày/nguồn. Baseline B browser demo cần hai nút từ source đến Health, không chọn trường/advanced. E cần một nút, không chọn trường/advanced ở desktop/laptop/mobile; vẫn nút **Chạy đối soát** riêng, cảnh báo không tự ghi nhận. Đây là giảm một thao tác bắt buộc theo cùng kịch bản, không phải chứng minh human task time.
+
+Đối chứng file ngoài demo gồm năm tình huống × ba viewport; code và cách sinh tại `scripts/qa_import_workflow.py`, reports ignored `reports/lab/unfamiliar-import*/results-*.json` có từng run ID/source SHA/layout/cash/export. CSV/XLSX rõ và 1.000 dòng đều tự đến Health; hai cột tiền cần một chọn, `1.000` cần hai chọn separator. 15/15 hoàn tất tự động, không cần mở advanced trước Health; không thay thế tỷ lệ hoàn thành của người mới. Desktop elapsed tới Health CSV/XLSX/ambiguous/locale/large lần lượt 451/440/735/838/836 ms; mobile 293/453/707/524/830 ms. Các lần script không warmup/lặp có kiểm soát và có thể chạy song song nên **không dùng để tuyên bố cải thiện latency**. Số clicks tính từ sau file selection; total changes ghi cả hai file selections. Không đo hoặc giả lập câu trả lời “người dùng hiểu thông báo”.
+
+Chọn giải pháp core guard nhỏ + UI progressive disclosure, giữ toàn bộ normalizer/Health Gate/traceability và dependency runtime hiện có. Một lần quét toàn bộ mapped money/currency tránh sample bỏ sót format; conservative abstention có thể đòi xác nhận nhiều hơn với locale có thể hợp lệ. Profile đã xác nhận là cách giảm lặp thao tác, không phải bỏ full-row validation. Nguồn NN/g/WHATWG/W3C ở RESEARCH_REFERENCES; chỉ QA tự động theo quyết định chủ dự án. Matching/classification scores bên dưới không được suy từ UI.
+
 Báo cáo này ghi kết quả thực đo ngày 2026-10-16 trên dữ liệu synthetic VND của SmartRecon. Hai feed business là khoản phải thu và giao dịch bank/PSP mô phỏng; không có sao kê thật và không có dữ liệu Olist-derived trong repository. Ground truth nằm ở `truth_edges.csv`/`truth_cases.csv`, được evaluator đọc sau khi engine hoàn tất và không được truyền cho matching runtime.
 
 Development/holdout được tách ổn định theo parity của byte đầu `SHA-256(case_id)`. Policy không được điều chỉnh bằng kết quả holdout. Kết quả dưới đây dùng holdout gồm 47 truth edges. Manifest demo có seed `42`; hard benchmark dùng seed `20261016`. Public API duy nhất để chạy thuật toán là `smartrecon.engine.run_reconciliation`, giống backend.

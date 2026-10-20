@@ -198,15 +198,22 @@ def main() -> None:
             "document.addEventListener('change', () => window.importInteractions.changes += 1);"
         )
         click_button(devtools, "Sử dụng dữ liệu mẫu")
-        wait_until(devtools, "document.body.innerText.includes('Kiểm tra và chuẩn hóa dữ liệu')")
-        capture(devtools, stage_path("mapping"))
-        click_button(devtools, "Xác nhận và chuẩn hóa dữ liệu")
+        wait_until(
+            devtools,
+            "document.body.innerText.includes('Kiểm tra và chuẩn hóa dữ liệu') || "
+            "document.body.innerText.includes('Dữ liệu sẵn sàng đối soát')",
+        )
+        automatic_import = devtools.evaluate("document.body.innerText.includes('Dữ liệu sẵn sàng đối soát')")
+        if not automatic_import:
+            capture(devtools, stage_path("mapping"))
+            click_button(devtools, "Xác nhận và chuẩn hóa dữ liệu")
         wait_until(devtools, "document.body.innerText.includes('Dữ liệu sẵn sàng đối soát')")
         import_interactions = devtools.evaluate(
             "({...window.importInteractions, "
             "elapsedMilliseconds: performance.now() - window.importInteractions.started})"
         )
         assert import_interactions["changes"] == 0
+        import_interactions["automatic_import"] = automatic_import
         capture(devtools, stage_path("health"))
         click_button(devtools, "Xem dòng dữ liệu liên quan")
         wait_until(devtools, "document.body.innerText.includes('Chi tiết vấn đề dữ liệu')")
@@ -245,6 +252,7 @@ def main() -> None:
         assert evidence["adjustmentBridge"] is True
         assert evidence["pagination"] is True
         assert evidence["scrollWidth"] <= evidence["width"]
+        assert evidence["scrollWidth"] <= args.width
         assert evidence["exportHref"]
         run_id_match = re.search(r"/api/runs/([^/]+)/exports", evidence["exportHref"])
         assert run_id_match

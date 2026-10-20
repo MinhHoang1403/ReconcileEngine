@@ -3,12 +3,12 @@
 ## Luồng sử dụng
 
 1. Chọn hai file CSV/XLSX riêng hoặc một workbook chứa hai sheet. Nếu workbook có tên sheet khó phân biệt, nhập rõ sheet đơn hàng và sheet giao dịch.
-2. Đọc khối **Đã phân tích và chuẩn bị dữ liệu**: loại nguồn, file/sheet, dòng tiêu đề và số trường bắt buộc đã xác định.
-3. Tập trung vào các mục màu cảnh báo. Mỗi đề xuất có mức tin cậy, lý do và giá trị mẫu; đây là gợi ý deterministic, không phải xác suất.
+2. Khi cấu trúc/nguồn/cột rõ ràng, loại tiền hiện rõ trong cả hai feed và số tiền là chuỗi integer không cần đoán separator, hệ thống tự chuẩn hóa rồi đưa đến Health Gate. Không cần chọn lại từng cột. File có profile đã xác nhận chỉ tự dùng sau khi kiểm tra toàn bộ dữ liệu hiện tại.
+3. Nếu có câu hỏi, chỉ cần xác nhận những trường còn mơ hồ. Các trường đã nhận diện nằm trong **Xem hoặc sửa các trường đã nhận diện**; lý do/giá trị mẫu vẫn được giữ, điểm gợi ý không phải xác suất.
 4. Chọn format ngày riêng cho từng feed nếu dữ liệu ngày/tháng mơ hồ. Chỉ cấu hình separator tiền đúng với file; VND có phần thập phân khác 0 luôn bị chặn.
-5. So dữ liệu gốc với **Xem trước dữ liệu sau chuẩn hóa**. Preview cập nhật khi mapping đổi và không tạo run.
+5. Có thể mở **Xem dữ liệu gốc** hoặc **Xem trước dữ liệu sau chuẩn hóa** khi cần; preview chỉ tải khi mở, cập nhật khi cấu hình đổi và không tạo run. Ở Health Gate, mở **Xem file gốc và cách đọc dữ liệu** hoặc **Chỉnh cách đọc dữ liệu** để quay lại cấu hình.
 6. Nếu cấu trúc được đánh dấu cần xem xét, xác nhận sheet/header sau khi kiểm tra. Nhấn **Xác nhận và chuẩn hóa dữ liệu** để tạo Health snapshot.
-7. Khi Health Gate `READY`, có thể tải hai CSV canonical hoặc bắt đầu đối soát.
+7. Khi Health Gate `READY`, có thể tải hai CSV canonical hoặc nhấn **Chạy đối soát**. Hệ thống không tự chạy matching, ghi nhận cảnh báo, loại dòng hay duyệt đề xuất chỉ vì việc nhập đã tự động.
 
 ## Import profile
 

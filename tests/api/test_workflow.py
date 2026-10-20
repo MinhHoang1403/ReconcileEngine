@@ -59,6 +59,58 @@ def _xlsx_upload(headers: list[str], values: list[object]) -> bytes:
 
 
 @pytest.mark.parametrize("suffix", [".csv", ".xlsx"])
+@pytest.mark.parametrize("amount,automatic", [("1000", True), ("1.000", False)])
+def test_inspection_only_offers_safe_automatic_normalization(
+    tmp_path: Path, monkeypatch, suffix: str, amount: str, automatic: bool
+) -> None:
+    session = MemorySession()
+
+    def test_db():
+        yield session
+
+    headers = ["order_id", "ordered_at", "expected_amount", "currency"]
+    values = ["ORDER001", "2026-10-20", amount, "VND"]
+    bank_headers = ["bank_txn_id", "txn_date", "posted_amount", "direction", "amount_basis", "currency"]
+    bank_values = ["BANK001", "2026-10-21", "1000", "CREDIT", "POSTED_CASH", "VND"]
+    if suffix == ".csv":
+        orders_content = (",".join(headers) + "\n" + ",".join(values) + "\n").encode()
+        bank_content = (",".join(bank_headers) + "\n" + ",".join(bank_values) + "\n").encode()
+        content_type = "text/csv"
+    else:
+        orders_content = _xlsx_upload(headers, values)
+        bank_content = _xlsx_upload(bank_headers, bank_values)
+        content_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    monkeypatch.setattr(get_settings(), "artifacts_path", tmp_path / "artifacts")
+    app.dependency_overrides[get_db] = test_db
+    try:
+        with TestClient(app) as client:
+            response = client.post(
+                "/api/uploads/inspect",
+                files={
+                    "orders_file": (f"receivables{suffix}", orders_content, content_type),
+                    "bank_file": (f"payments{suffix}", bank_content, content_type),
+                },
+            )
+            assert response.status_code == 200
+            inspection = response.json()
+            assert (inspection["automatic_mapping"] is not None) is automatic
+            assert not any(model is ReconciliationRun for model, _ in session.objects)
+            if automatic:
+                assert inspection["automation_reasons"] == []
+                checked = client.post(
+                    f"/api/uploads/{inspection['session_id']}/mapping", json=inspection["automatic_mapping"]
+                )
+                assert checked.status_code == 200
+                assert checked.json()["report"]["status"] == "READY"
+                assert checked.json()["acknowledged_issue_codes"] == []
+                assert not any(model is ReconciliationRun for model, _ in session.objects)
+            else:
+                assert "MONEY_FORMAT_REQUIRES_CONFIRMATION" in inspection["automation_reasons"]
+    finally:
+        app.dependency_overrides.clear()
+
+
+@pytest.mark.parametrize("suffix", [".csv", ".xlsx"])
 def test_fractional_vnd_health_detail_preserves_source_context(
     tmp_path: Path,
     monkeypatch,

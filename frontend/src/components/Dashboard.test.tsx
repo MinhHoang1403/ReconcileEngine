@@ -55,6 +55,7 @@ test("dashboard sắp xếp đúng luồng, tra cứu trang hiện tại và xu�
   expect(screen.getByText(/1.000.*800.*0.*200/)).toBeInTheDocument();
   expect(screen.getByRole("link", { name: "Tải báo cáo Excel" })).toHaveAttribute("href", "/api/runs/run-123/exports?format=xlsx&expected_revision=1");
   expect(screen.getByText("50%")).toBeInTheDocument();
+  expect(screen.getByRole("columnheader", { name: "Tiền ngân hàng chưa phân bổ" }).closest("table")?.parentElement).toHaveClass("table-wrap");
   fireEvent.change(screen.getByPlaceholderText("Tìm theo mã, trạng thái hoặc quy tắc…"), { target: { value: "ORDER-002" } });
   expect(screen.queryByText("ORDER-001")).not.toBeInTheDocument();
   expect(screen.getByText("ORDER-002")).toBeInTheDocument();

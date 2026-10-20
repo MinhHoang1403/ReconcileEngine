@@ -130,7 +130,7 @@ export function HealthGate({ health, busy, onAcknowledge, onExclude, onRun, onBa
           <p>Cảnh báo và đề xuất ghép chưa xác nhận không được tính vào KPI tiền.</p>
         </div>
         <div className="button-row">
-          <button className="secondary" type="button" onClick={onBack} disabled={busy}>Quay lại ánh xạ</button>
+          <button className="secondary" type="button" onClick={onBack} disabled={busy}>Chỉnh cách đọc dữ liệu</button>
           {ready && <>
             <a className="secondary link-button" href={`/api/uploads/${health.session_id}/normalized/orders.csv`}>Tải CSV đơn hàng</a>
             <a className="secondary link-button" href={`/api/uploads/${health.session_id}/normalized/bank_transactions.csv`}>Tải CSV giao dịch</a>

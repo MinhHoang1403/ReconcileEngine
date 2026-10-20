@@ -2,6 +2,8 @@
 
 SmartRecon là ứng dụng đối soát hai nguồn: khoản phải thu nội bộ và giao dịch ghi có ngân hàng/PSP. Hệ thống ưu tiên bảo toàn tiền, tránh tự ghép khi thiếu bằng chứng, và lưu dấu vết cho từng kết quả.
 
+Trên nhánh nghiên cứu, file rõ nghĩa được đưa thẳng qua kiểm tra chất lượng, không bắt chọn từng cột. Hệ thống vẫn hỏi khi cột/tiền/ngày/nguồn mơ hồ và chỉ chạy đối soát khi người dùng nhấn nút. Xem [hướng dẫn nhập liệu](docs/SMART_IMPORT_GUIDE.md). Mọi thử nghiệm nâng cấp đang chạy riêng tại Lab `http://localhost:5174`; chưa chuyển môi trường chính và chưa kiểm chứng usability với người dùng thật.
+
 ## Khởi động bằng Docker Desktop
 
 Yêu cầu: Docker Desktop/Engine có Compose. PostgreSQL không được publish ra host.

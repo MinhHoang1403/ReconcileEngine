@@ -2,6 +2,12 @@
 
 Tài liệu này phân biệt nguồn nghiên cứu, đặc tả chính thức, quyết định nghiệp vụ và heuristic nội bộ. Không có benchmark hoặc độ chính xác nào được suy ra chỉ từ các nguồn dưới đây.
 
+## Trải nghiệm nhập liệu và progressive disclosure
+
+- Jakob Nielsen (2006), [Progressive Disclosure](https://www.nngroup.com/articles/progressive-disclosure/), NN/g: đưa thông tin chuyên sâu sang lớp mở theo yêu cầu, giữ tác vụ thường dùng ở lớp chính. Giả định phải chọn đúng thông tin cần thấy; che lựa chọn quan trọng có thể làm người dùng bỏ sót. SmartRecon giữ câu hỏi mơ hồ và Health Gate nổi bật, thu gọn cột chắc chắn/preview, không ẩn cảnh báo tài chính. Kiểm chứng bằng browser scenarios/interaction counts; nguồn này không chứng minh người dùng SmartRecon hiểu thông báo. Theo quyết định chủ dự án, lần này chỉ nghiệm thu tự động, chưa observational usability study.
+- [WHATWG HTML Standard — details/summary](https://html.spec.whatwg.org/multipage/interactive-elements.html#the-details-element), đặc tả disclosure gốc của trình duyệt; dùng phần tử semantic thay vì thêm thư viện UI. Test mở/đóng preview và quay lại xác nhận trên Edge desktop/mobile. Không suy từ đặc tả rằng đã test mọi trình duyệt/assistive technology.
+- [W3C WCAG 2.2 — Understanding 3.3.2 Labels or Instructions](https://www.w3.org/WAI/WCAG22/Understanding/labels-or-instructions.html): căn cứ đặt nhãn/câu hỏi rõ cho trường cần nhập. Đây là hướng dẫn, không phải chứng nhận ứng dụng đạt toàn bộ WCAG. Negative tests giữ câu hỏi tiền/ngày/currency, cột còn mơ hồ không tự điền.
+
 ## Record linkage và entity resolution
 
 - [Splink 5 documentation](https://moj-analytical-services.github.io/splink/index.html) và [repository chính thức](https://github.com/moj-analytical-services/splink), MIT, dùng Fellegi–Sunter và EM để ước lượng tham số. Giả định có nhiều thuộc tính so sánh đủ thông tin, không tương quan quá mạnh; một memo đơn lẻ/thiếu thuộc tính độc lập không đủ bảo đảm chất lượng. Thí nghiệm 2026-10-20 dùng Splink 5.0.0 + DuckDB cục bộ, train EM không nhãn trên development, giữ nguyên block currency/date/amount, đánh giá top-5/MRR/recall trên case-hash holdout. Không đưa probability vào quyết định tài chính; default prior và tham số tên chưa ước lượng đủ được công bố. Recall tăng một edge so với fuzzy-only nhưng nhiều false candidates hơn và engine đầy đủ vốn đã có candidate recall 100%; chưa chọn tích hợp.

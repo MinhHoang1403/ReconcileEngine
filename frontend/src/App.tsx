@@ -13,6 +13,15 @@ import { SourceWorkspace } from "./components/SourceWorkspace";
 import type { BankRow, DashboardData, ExceptionRow, ExplorerTotals, GroupRow, HealthIssue, HealthResponse, Inspection, MappingState, OrderRow } from "./types";
 import "./styles.css";
 
+const importQuestions: Record<string, string> = {
+  STRUCTURE_REQUIRES_CONFIRMATION: "Hãy kiểm tra đúng trang tính và dòng tiêu đề của file.",
+  SOURCE_REQUIRES_CONFIRMATION: "Loại nguồn này cần xác nhận ý nghĩa trước khi đối soát; hệ thống không tự gộp các dòng.",
+  MAPPING_REQUIRES_CONFIRMATION: "Hãy xác nhận những cột còn chưa rõ bên dưới. Các cột đã nhận diện được thu gọn.",
+  CURRENCY_REQUIRES_CONFIRMATION: "Chưa xác định được một loại tiền duy nhất. Hãy xác nhận loại tiền của hai file.",
+  MONEY_FORMAT_REQUIRES_CONFIRMATION: "Hãy xác nhận dấu phân cách số tiền. Ví dụ 1.000 có thể được hiểu khác nhau; hệ thống không tự đoán.",
+  DATE_FORMAT_REQUIRES_CONFIRMATION: "Hãy chọn cách đọc ngày/tháng trong file để không đảo nhầm ngày.",
+};
+
 function inspectionDefaults(value: Inspection): Inspection {
   const fallbackAnalysis = (selected: Record<string, string>, requiredTotal: number) => ({
     suggestions: Object.entries(selected).map(([canonical_target, source_column]) => ({
@@ -105,6 +114,8 @@ export function App() {
   const [busy, setBusy] = useState(false);
   const [mappingValid, setMappingValid] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [normalizedPreviewOpen, setNormalizedPreviewOpen] = useState(false);
+  const [sourceDetailsOpen, setSourceDetailsOpen] = useState(false);
 
   useEffect(() => {
     fetchHealth().then(() => setServiceReady(true)).catch(() => setServiceReady(false));
@@ -127,15 +138,27 @@ export function App() {
     }
   }
 
-  function acceptInspection(value: Inspection) {
+  async function acceptInspection(value: Inspection) {
     const prepared = inspectionDefaults(value);
     setInspection(prepared);
-    setMapping(initialMapping(prepared));
+    const nextMapping = prepared.automatic_mapping ?? initialMapping(prepared);
+    setMapping(nextMapping);
     setMappingValid(false);
     setHealth(null);
     setSaveProfile(false);
     setProfileName("");
-    setStep("mapping");
+    setNormalizedPreviewOpen(false);
+    setSourceDetailsOpen(false);
+    if (prepared.automatic_mapping) {
+      try {
+        const checked = await api.confirmMapping(prepared.session_id, nextMapping);
+        setHealth(checked);
+        setStep("health");
+      } catch (caught) {
+        setStep("mapping");
+        throw caught;
+      }
+    } else setStep("mapping");
   }
 
   async function loadRun(id: string) {
@@ -261,9 +284,10 @@ export function App() {
               <button className="text-button" type="button" onClick={reset}>Chọn lại nguồn</button>
             </div>
             <ImportSummary inspection={inspection} mapping={mapping} onChange={setMapping} />
-            <div className="preview-grid"><RawPreview title="Danh sách đơn hàng cần thu tiền" data={inspection.raw_eda.orders} /><RawPreview title="Danh sách giao dịch thanh toán" data={inspection.raw_eda.bank_transactions} /></div>
-            <MappingEditor mapping={mapping} ordersEda={inspection.raw_eda.orders} bankEda={inspection.raw_eda.bank_transactions} suggestions={inspection.mapping_suggestions} onChange={setMapping} onValidityChange={setMappingValid} />
-            <NormalizedPreview sessionId={inspection.session_id} mapping={mapping} enabled={mappingValid} />
+            {!!inspection.automation_reasons?.length && <aside className="gate-callout blocked" role="status"><strong>Một vài chi tiết cần bạn xác nhận</strong><ul>{inspection.automation_reasons.map((reason) => <li key={reason}>{importQuestions[reason] ?? "Hãy kiểm tra cách đọc dữ liệu trước khi tiếp tục."}</li>)}</ul></aside>}
+            <MappingEditor compact showParsing={inspection.automation_reasons?.some((reason) => ["CURRENCY_REQUIRES_CONFIRMATION", "MONEY_FORMAT_REQUIRES_CONFIRMATION", "DATE_FORMAT_REQUIRES_CONFIRMATION"].includes(reason))} mapping={mapping} ordersEda={inspection.raw_eda.orders} bankEda={inspection.raw_eda.bank_transactions} suggestions={inspection.mapping_suggestions} onChange={setMapping} onValidityChange={setMappingValid} />
+            <details className="surface import-details"><summary>Xem dữ liệu gốc</summary><div className="preview-grid"><RawPreview title="Danh sách đơn hàng cần thu tiền" data={inspection.raw_eda.orders} /><RawPreview title="Danh sách giao dịch thanh toán" data={inspection.raw_eda.bank_transactions} /></div></details>
+            <details className="surface import-details" onToggle={(event) => setNormalizedPreviewOpen(event.currentTarget.open)}><summary>Xem trước dữ liệu sau chuẩn hóa</summary>{normalizedPreviewOpen && <NormalizedPreview sessionId={inspection.session_id} mapping={mapping} enabled={mappingValid} />}</details>
             <div className="action-bar">
               <div className="confirmation-copy"><strong>Xác nhận cách đọc dữ liệu trước khi chuẩn hóa</strong><p>Mã định danh được giữ dạng chuỗi. Hệ thống không tự tạo mã, đổi cơ sở số tiền hoặc suy đoán ngày mơ hồ.</p>
                 {!inspection.import_profile.applied && <label className="save-profile"><input type="checkbox" checked={saveProfile} onChange={(event) => setSaveProfile(event.target.checked)} /><span>Lưu cấu hình này cho file có cùng cấu trúc</span></label>}
@@ -281,7 +305,11 @@ export function App() {
         )}
 
         {step === "health" && health && (
-          <HealthGate health={health} busy={busy} onAcknowledge={() => void acknowledgeWarnings()} onExclude={(issue, reason) => void excludeIssue(issue, reason)} onRun={() => void runReconciliation()} onBack={() => setStep("mapping")} />
+          <div className="stack">
+            {inspection?.automatic_mapping && <div className="surface import-ready" role="status"><strong>Đã tự nhận diện và kiểm tra dữ liệu</strong><span>Giữ nguyên file gốc · {mapping?.currency} · chưa chạy đối soát hoặc chấp thuận đề xuất.</span></div>}
+            <HealthGate health={health} busy={busy} onAcknowledge={() => void acknowledgeWarnings()} onExclude={(issue, reason) => void excludeIssue(issue, reason)} onRun={() => void runReconciliation()} onBack={() => setStep("mapping")} />
+            {inspection && mapping && <details className="surface import-details" onToggle={(event) => setSourceDetailsOpen(event.currentTarget.open)}><summary>Xem file gốc và cách đọc dữ liệu</summary>{sourceDetailsOpen && <><div className="preview-grid"><RawPreview title="Danh sách đơn hàng cần thu tiền" data={inspection.raw_eda.orders} /><RawPreview title="Danh sách giao dịch thanh toán" data={inspection.raw_eda.bank_transactions} /></div><NormalizedPreview sessionId={inspection.session_id} mapping={mapping} enabled /></>}</details>}
+          </div>
         )}
 
         {step === "dashboard" && dashboard && runId && (

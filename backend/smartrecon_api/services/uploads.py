@@ -23,6 +23,7 @@ from backend.smartrecon_api.services.artifacts import (
 )
 from backend.smartrecon_api.services.serialization import to_jsonable
 from smartrecon.domain.statuses import Severity
+from smartrecon.ingest.automation import plan_automatic_import
 from smartrecon.ingest.eda import eda_to_dict, summarize_raw, summarize_standardized
 from smartrecon.ingest.health import Exclusion, apply_exclusions, build_health_report
 from smartrecon.ingest.mapping import (
@@ -164,6 +165,16 @@ def _persist_inspection(
                 "import_profile_schema_version": matched_profile.schema_version,
             },
         }
+    automatic = plan_automatic_import(
+        raw,
+        order_analysis,
+        bank_analysis,
+        confirmed_mapping=mapping_from_request(saved_profile["mapping_snapshot"])
+        if saved_profile
+        else effective_mapping,
+        source_supported=effective_mapping is not None
+        or all(profile["status"] == "RECOGNIZED" for profile in built_in_profiles.values()),
+    )
     manifest = {
         "dataset_profile": dataset_profile,
         "schema_fingerprint": fingerprint,
@@ -226,6 +237,8 @@ def _persist_inspection(
             "orders": to_jsonable(order_analysis),
             "bank_transactions": to_jsonable(bank_analysis),
         },
+        "automatic_mapping": to_jsonable(automatic.mapping) if automatic.mapping else None,
+        "automation_reasons": list(automatic.reasons),
         "detected_structure": {
             "orders": to_jsonable(raw.orders.structure),
             "bank_transactions": to_jsonable(raw.bank_transactions.structure),
