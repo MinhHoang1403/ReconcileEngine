@@ -3,6 +3,7 @@ from datetime import date
 from hypothesis import given
 from hypothesis import strategies as st
 
+from smartrecon.config import ReconciliationPolicy
 from smartrecon.domain.invariants import check_conservation
 from smartrecon.domain.models import (
     AllocationEdge,
@@ -11,6 +12,8 @@ from smartrecon.domain.models import (
     VerifiedAdjustment,
 )
 from smartrecon.domain.statuses import AmountBasis, Currency, Direction
+from smartrecon.engine import run_reconciliation
+from smartrecon.ingest.normalization import NormalizedBundle
 
 
 @given(
@@ -101,3 +104,36 @@ def test_verified_fee_is_not_counted_as_bank_cash() -> None:
     assert report.bank_allocated["B"] == 9_800
     assert report.order_adjusted["O"] == 200
     assert report.order_outstanding["O"] == 0
+
+
+@given(
+    amounts=st.lists(st.integers(min_value=0, max_value=10**12), min_size=1, max_size=6),
+    posted=st.integers(min_value=0, max_value=10**13),
+)
+def test_engine_group_cash_matches_independent_capacity_oracle(amounts: list[int], posted: int) -> None:
+    orders = tuple(Order(f"O-{index}", date(2026, 1, 1), amount, Currency.VND) for index, amount in enumerate(amounts))
+    banks = (
+        BankTransaction(
+            "BANK",
+            date(2026, 1, 1),
+            posted,
+            Direction.CREDIT,
+            AmountBasis.POSTED_CASH,
+            Currency.VND,
+            description=" ".join(order.order_id for order in orders),
+        ),
+    )
+    inputs = NormalizedBundle(orders, banks, (), (), (), {})
+    result = run_reconciliation(inputs, ReconciliationPolicy(Currency.VND))
+    assert sum(edge.allocated_cash_minor for edge in result.allocations) == min(sum(amounts), posted)
+    assert result.bank_unapplied_minor["BANK"] == max(0, posted - sum(amounts))
+    assert sum(result.order_outstanding_minor.values()) == max(0, sum(amounts) - posted)
+    assert result.conservation.is_valid
+    for order in orders:
+        assert sum(edge.allocated_cash_minor for edge in result.allocations if edge.order_id == order.order_id) <= (
+            order.expected_amount_minor
+        )
+    reversed_result = run_reconciliation(
+        NormalizedBundle(orders[::-1], banks, (), (), (), {}), ReconciliationPolicy(Currency.VND)
+    )
+    assert result.semantic_checksum == reversed_result.semantic_checksum

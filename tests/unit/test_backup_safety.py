@@ -64,3 +64,11 @@ def test_restore_rejects_retagged_backup_image_before_creating_resources(tmp_pat
     with pytest.raises(AssertionError, match="image"):
         backup_restore.restore_drill(tmp_path)
     assert calls == []
+
+
+def test_matching_mutation_qa_refuses_non_lab_urls() -> None:
+    from scripts.qa_matching import exercise
+
+    for address in ("http://localhost:8000", "http://127.0.0.1:5173", "https://example.org:8002"):
+        with pytest.raises(ValueError, match="restricted"):
+            exercise(address)

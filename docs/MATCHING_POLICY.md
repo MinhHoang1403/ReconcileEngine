@@ -10,6 +10,10 @@ Engine dựng toàn bộ graph full-reference trước khi reserve cash. Việc 
 - bank là `CREDIT` với `POSTED_CASH` hoặc `NET_SETTLEMENT`;
 - date gap nằm trong cửa sổ policy và không có participant đã reserve.
 
+Nếu một bank row vừa có full unique reference vừa có full reference collision, toàn bộ connected component phải review; mã riêng không được che collision. Evidence phải nêu `REFERENCE_COLLISION`, không được đồng thời khẳng định `NO_REFERENCE_COLLISION`. Khi cùng participant có đề xuất full-reference tại T+N và fuzzy/amount-only, resolver giữ evidence full-reference (kể cả lý do cần review) thay vì ghi đè bằng điểm fuzzy. Đây là thực thi thứ tự chứng cứ đã quy định, không tăng quyền auto-confirm.
+
+Biên full token kiểm tra chữ/số Unicode, không chỉ ASCII: `ĐDH01`/`DH01Ж` không chứa full token `DH01`. Dấu cách, `_` và `-` vẫn là separator được grammar hiện hành hỗ trợ. Không chuyển ký tự nhìn giống nhau thành bằng chứng exact.
+
 Ngay cả khi link confirmed, amount có thể `PARTIAL` hoặc `OVERPAID`; allocator không tạo edge vượt cash bank hoặc nghĩa vụ order.
 
 ## Waterfall

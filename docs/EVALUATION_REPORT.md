@@ -118,6 +118,77 @@ research/.venv/Scripts/python.exe research/mapping_evaluation.py --method hybrid
 
 Trên Linux dùng `research/.venv/bin/python`. Runner ghi path/hash/source commit/dirty state để tránh vô tình import editable package từ worktree khác. Không truyền truth vào mapping runtime.
 
+## Matching, sensitivity và công cụ nghiên cứu trong Lab — 2026-10-20
+
+`research/matching_evaluation.py` chạy baseline `4dfd62e` và core candidate trên **cùng đường dẫn demo chủ dự án cung cấp**, raw CSV hashes tại QA_REPORT, rồi sinh cùng hard dataset 1.000 orders bằng seed `20261016`. Mỗi dataset warmup một lần, năm lần đo, so checksum trong từng implementation và conservation ở mọi run. Cấu hình/thư viện/phần cứng/source hashes/source commit/dirty state/từng thời gian được ghi JSON. Trước đo đã chạy 32 golden/property tests; sau sửa có thêm engine allocation property test. Không dùng truth làm input engine.
+
+| Full engine | Baseline | Candidate |
+|---|---:|---:|
+| Demo confirmed cash (VND) | 66.431.000 | 66.431.000 |
+| Demo edge P / R / F1 | 1 / 0,928571 / 0,962963 | Không đổi |
+| Demo candidate recall / false auto | 1 / 0 | Không đổi |
+| Demo allocation absolute error (VND) | 1.000.000 | 1.000.000 |
+| Holdout edge F1 / false auto | 0,955556 / 0 | Không đổi |
+| Hard **full truth** edge F1 / false auto | 0,996481 / 0 | Không đổi |
+| Demo median / peak Python allocation | 129,61 ms / 740.413 bytes | 107,48 ms / 732.493 bytes |
+| Hard median / peak Python allocation | 3,317 s / 7.758.272 bytes | 3,638 s / 7.851.076 bytes |
+
+Từng tuple `(order_id, bank_id, cash)` trên cả demo và hard **giống nhau hoàn toàn** trước/sau; không chỉ so tổng tiền. Sai số đánh giá bao gồm truth edges chưa tự xác nhận (prediction 0), không phải cash bị mất/allocated sai. Semantic checksum giữa hai implementation khác vì thay ưu tiên/sắp xếp evidence groups; trong mỗi implementation năm lần có checksum ổn định. Snapshot run cũ không được tính lại hay ghi đè. Thời gian có dao động hệ thống local, không kết luận nâng tốc độ; đây không phải stress benchmark hoặc dữ liệu tài chính thật.
+
+| Quan hệ trên demo (full truth) | Truth edges | Candidate recall | Confirmed recall |
+|---|---:|---:|---:|
+| 1:1 | 89 | 100% | 97,75% |
+| N:1 | 4 | 100% | 50% |
+| 1:N | 2 | 100% | 100% |
+| M:N | 3 | 100% | 0% (review-only) |
+
+Sensitivity dùng **development** và grid khai báo trước: `max_days_diff ∈ {0,1,3,7}`, fuzzy threshold `{70,85,95}`, group/split size `{2,3,4}` (36 cấu hình). Mọi run conservation đúng/false auto 0 trên tập này; candidate recall 100%; F1 lần lượt 0,583333 / 0,8 / 0,969697 / 0,969697 theo cửa sổ ngày. Không chọn policy dựa trên holdout, không đổi default 3 ngày/85/top-5/size-3/block-20/2.000 tổ hợp. Đây là độ nhạy trên demo ít hard cases, không kết luận ngưỡng tối ưu phổ quát.
+
+### Splink: chỉ đánh giá ranking, không auto-confirm
+
+Train EM không nhãn trên development hiện có; holdout participant không giao development. Cùng raw input, cùng envelope currency/date 0–3 ngày/amount ±10%, top-5, seed 42; feature challenger gồm reference token đầu tiên trong memo, tên, amount và ngày. RapidFuzz giữ scorer/tokenization hiện hành; hai cách trích/so sánh chuỗi không tương đương nên không gán mọi khác biệt cho riêng EM. Mô hình 1:1 không giải group/split. Default prior 0,0001 chưa hiệu chuẩn; Splink cảnh báo m/u của tên không đủ quan sát, giữ default các mức thiếu. Không giấu warning, không mô tả match probability là chứng cứ thu tiền.
+
+| Ranking trên 47 truth edges/46 queries | Fuzzy-only | Splink | Splink bỏ tên |
+|---|---:|---:|---:|
+| Candidate recall | 93,62% | 95,74% | 95,74% |
+| Precision@1 / MRR | 95,65% / 0,9565 | 97,83% / 0,9783 | Không đổi |
+| Precision@5 | 19,13% | 19,57% | 19,57% |
+| False candidates / tổng candidates | 15 / 59 | 45 / 90 | 45 / 90 |
+| Candidates trung bình/query | 1,283 | 1,957 | 1,957 |
+| Median inference (kể khởi tạo DB/linker) | 8,94 ms | 222,92 ms | 287,95 ms |
+| Peak Python bytes | 17.088 | 334.599 | 282.069 |
+
+P@5 chia 5 cho mỗi query kể cả trả ít hơn năm candidates. Recall theo quan hệ: 1:1 44/45 → 45/45; N:1 0/2 ở cả hai ranking vì amount block 1:1, không được che bằng số tổng. Holdout này không có 1:N/M:N; full-engine table phía trên báo các quan hệ đó. Reverse input order cho cả ba cách giữ ranking giống nhau. Thời gian train được lưu riêng trong `candidate-ranking.json`; không tính vào inference. Giữ RapidFuzz runtime; Splink cần dữ liệu độc lập/hiệu chuẩn tốt hơn, không giúp candidate recall của full engine vốn đã 100% trong demo.
+
+### CP-SAT: nghiệm tổ hợp không phải chứng cứ tài chính
+
+Tám subset fixtures, hash `634531f47c3361688ce0e2caf3f4d4a2b76634e8e6a67cabaee37690fa898f2e`; oracle tổ hợp không gọi engine/solver. So cùng max subset size; size-4 là cấu hình nghiên cứu tường minh, không đổi policy mặc định. CP-SAT giới hạn 1 giây/một worker/seed 42; ngoại lệ timeout fixture dùng 0 giây và explosion dừng sau năm nghiệm.
+
+| Case | Số nghiệm oracle | Bounded tìm được | CP-SAT tìm được / status | Tìm hết? |
+|---|---:|---:|---|---|
+| N:1 đơn giản | 1 | 1 | 1 / OPTIMAL | Có |
+| 1:N đơn giản | 1 | 1 | 1 / OPTIMAL | Có |
+| Cùng tổng, participant khác | 4 | 4 | 4 / OPTIMAL | Có |
+| Block 21 phần tử | 40 | 0, báo exhausted | 40 / OPTIMAL | Có |
+| Nhóm bốn phần tử | 1 | 1 | 1 / OPTIMAL | Có |
+| Enumeration budget 1 | 37 | 0, báo exhausted | 37 / OPTIMAL | Có |
+| 80 khoản cùng tiền, chọn bốn | 1.581.580 | 0, báo exhausted | 5 / FEASIBLE | Không |
+| Time limit trước search | 1 | 1 | 0 / UNKNOWN | Không |
+
+CP-SAT median lần lượt 2,844 / 2,470 / 3,518 / 96,742 / 4,118 / 100,294 / 11,660 / 1,777 ms; peak Python allocations tối đa 42.729 bytes (không phải native solver RSS). Mỗi nghiệm được kiểm tra lại bằng phép cộng integer và participant identity. Một ví dụ M:N 100.000+200.000 đối 150.000+150.000 có hai flow khác nhau nhưng đều đúng tổng; script chứng minh không thể suy identity từ conservation. Không chuyển bất kỳ nghiệm CP-SAT thành allocation/confirmed. Solver có lợi cho block lớn trong fixture nhưng nhiều nghiệm/budget/triage còn cần benchmark rộng: giữ bounded runtime, CP-SAT chỉ nghiên cứu tiếp.
+
+Tái lập (sau `uv sync --project research --frozen`):
+
+```powershell
+research/.venv/Scripts/python.exe research/matching_evaluation.py --dataset C:/Work/ReconcileEngine/data/demo/vn_synthetic_demo --core-source C:/Work/ReconcileEngine/src --output reports/lab/matching-baseline.json
+research/.venv/Scripts/python.exe research/matching_evaluation.py --dataset C:/Work/ReconcileEngine/data/demo/vn_synthetic_demo --output reports/lab/matching-candidate.json
+research/.venv/Scripts/python.exe research/ranking_evaluation.py --output reports/lab/candidate-ranking.json
+research/.venv/Scripts/python.exe research/solver_evaluation.py --output reports/lab/subset-solvers.json
+uv run python scripts/qa_matching.py --output reports/lab/matching-http-oracles.json
+```
+
+`qa_matching.py` chỉ cho mutation tại loopback Lab port 8002, từ chối URL chính trước request. Các thí nghiệm vẫn chưa thay thế kiểm định classification, stress test, UX, restart/concurrency tổng hợp và diễn tập release ở các checkpoint sau.
+
 ## Tái lập
 
 Notebook chính là `notebooks/reconciliation_research.ipynb`. Kiểm thử dùng kernel sạch, working directory tương đối và chạy mọi cell bằng `nbclient`; notebook đã được thực thi và lưu output thực. Dependency được khóa trong `uv.lock`. Script evaluation ghi manifest, seed, dataset hashes, policy snapshot, phần cứng và commit hiện hành vào JSON output. Runtime artifact nằm trong `reports/` và bị Git ignore để tránh commit dữ liệu chạy tùy máy; bảng kết quả kiểm chứng được version hóa trong tài liệu này.

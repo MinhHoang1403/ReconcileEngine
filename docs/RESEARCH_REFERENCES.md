@@ -4,6 +4,9 @@ Tài liệu này phân biệt nguồn nghiên cứu, đặc tả chính thức, 
 
 ## Record linkage và entity resolution
 
+- [Splink 5 documentation](https://moj-analytical-services.github.io/splink/index.html) và [repository chính thức](https://github.com/moj-analytical-services/splink), MIT, dùng Fellegi–Sunter và EM để ước lượng tham số. Giả định có nhiều thuộc tính so sánh đủ thông tin, không tương quan quá mạnh; một memo đơn lẻ/thiếu thuộc tính độc lập không đủ bảo đảm chất lượng. Thí nghiệm 2026-10-20 dùng Splink 5.0.0 + DuckDB cục bộ, train EM không nhãn trên development, giữ nguyên block currency/date/amount, đánh giá top-5/MRR/recall trên case-hash holdout. Không đưa probability vào quyết định tài chính; default prior và tham số tên chưa ước lượng đủ được công bố. Recall tăng một edge so với fuzzy-only nhưng nhiều false candidates hơn và engine đầy đủ vốn đã có candidate recall 100%; chưa chọn tích hợp.
+- Christen, P. (2012), *A Survey of Indexing Techniques for Scalable Record Linkage and Deduplication*, DOI [10.1109/TKDE.2011.127](https://doi.org/10.1109/TKDE.2011.127), là nguồn nghiên cứu về giới hạn indexing/blocking. DOI không tải được qua công cụ ở lần kiểm tra này; không tuyên bố đã đọc toàn văn hoặc triển khai một index của bài. Benchmark SmartRecon đo explicit blocking hiện có và báo các candidate bị bỏ sót, không suy hiệu năng từ bài báo.
+
 - Fellegi, I. P. & Sunter, A. B. (1969), “A Theory for Record Linkage”, *Journal of the American Statistical Association*, 64(328), 1183–1210, DOI [10.1080/01621459.1969.10501049](https://doi.org/10.1080/01621459.1969.10501049). Đây là nền tảng nghiên cứu về quyết định match/non-match/review dựa trên evidence; SmartRecon không triển khai mô hình xác suất Fellegi–Sunter và không gọi heuristic score là xác suất.
 - Christen, P. (2012), *Data Matching: Concepts and Techniques for Record Linkage, Entity Resolution, and Duplicate Detection*, Springer, DOI [10.1007/978-3-642-31164-2](https://doi.org/10.1007/978-3-642-31164-2). Dùng làm tham chiếu khái niệm normalization, blocking, comparison và evaluation; không dùng để biện minh auto-confirm thiếu chứng cứ tài chính.
 
@@ -26,6 +29,8 @@ Tài liệu này phân biệt nguồn nghiên cứu, đặc tả chính thức, 
 - Các identity cash/receivable trong `MONEY_INVARIANTS.md` là **quy tắc nghiệp vụ của hệ thống simplified payment reconciliation**, không phải chuẩn kế toán tổng quát. Chúng chỉ đúng sau khi xác định eligibility, direction, amount basis và adjustment policy.
 
 ## Subset/group matching và giới hạn tính toán
+
+- [Google OR-Tools CP-SAT](https://developers.google.com/optimization/cp/cp_solver) và [repository chính thức](https://github.com/google/or-tools), Apache-2.0, là tài liệu kỹ thuật cho integer constraints, solution callback và solver status. Thí nghiệm dùng OR-Tools 9.15.6755, Boolean subset variables/integer cash flow, một worker/seed 42, bounded time/solution count, không tối ưu/xác nhận liên kết từ equality of sums. Giả định candidate block và tiền integer hợp lệ; nhiều nghiệm, `FEASIBLE` hoặc `UNKNOWN` không chứng minh giao dịch thật hay không tồn tại nghiệm. Tám fixture có oracle tổ hợp độc lập, kiểm tra cả M:N có nhiều flow cùng bảo toàn; số đo và quyết định chưa tích hợp runtime ở `EVALUATION_REPORT.md`.
 
 - Garey, M. R. & Johnson, D. S. (1979), *Computers and Intractability*, W. H. Freeman, là nguồn kinh điển cho tính khó của các bài toán tổ hợp liên quan subset sum. SmartRecon không brute-force toàn tập: block trước, giới hạn group/block/combinations, và không auto-confirm từ amount sum đơn thuần.
 - Giới hạn `k<=3`, `block_size<=20`, `max_combinations=2000` là guardrail demo nội bộ. Khi budget cạn, kết quả phải review; không được xác nhận từ search dở dang.

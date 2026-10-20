@@ -92,9 +92,12 @@ def discover_strong_reference_groups(
         in_window = all(0 <= gap <= policy.max_days_diff for gap in gap_values)
         currencies_valid = all(order_by_id[order_id].currency is policy.currency for order_id in order_ids)
         complex_many = len(order_ids) > 1 and len(bank_ids) > 1
-        auto_confirm = in_window and currencies_valid and not complex_many
+        # A unique hit elsewhere on the same row must not erase a conflicting
+        # reference. Keep the entire connected component review-only.
+        has_collision = bool(component_banks.intersection(collided_banks))
+        auto_confirm = in_window and currencies_valid and not complex_many and not has_collision
         layer = "L1" if not gap_values or max(gap_values) == 0 else "L2"
-        reasons = ["FULL_REFERENCE", "NO_REFERENCE_COLLISION"]
+        reasons = ["FULL_REFERENCE", "REFERENCE_COLLISION" if has_collision else "NO_REFERENCE_COLLISION"]
         if len(order_ids) > 1:
             reasons.append("MULTI_FULL_REFERENCE")
         if len(bank_ids) > 1:

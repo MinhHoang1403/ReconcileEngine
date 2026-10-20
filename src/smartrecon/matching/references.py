@@ -32,7 +32,9 @@ def compile_known_reference_patterns(known_references: set[str]) -> tuple[tuple[
     patterns: list[tuple[str, Pattern[str]]] = []
     for reference in sorted(known_references, key=lambda item: (-len(item), item)):
         flexible = r"[\s_-]*".join(re.escape(character) for character in reference)
-        patterns.append((reference, re.compile(rf"(?<![A-Z0-9]){flexible}(?![A-Z0-9])")))
+        # Unicode letters/digits are token characters too; underscores remain
+        # permitted separators. An ASCII-only boundary can match inside ĐDH01.
+        patterns.append((reference, re.compile(rf"(?<![^\W_]){flexible}(?![^\W_])")))
     return tuple(patterns)
 
 

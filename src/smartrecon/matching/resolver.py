@@ -59,14 +59,20 @@ def resolve_groups(
     # L3 carries identity-like text evidence and should represent a duplicate
     # proposed pair instead of the weaker amount/date-only L2 candidate.
     layer_rank = {"L1": 4, "L3": 3, "L2": 2, "L4": 1}
+
+    def priority(item: ProposedGroup) -> tuple[int, int, int]:
+        # A reference discovered at T+N still outranks fuzzy/amount coincidence.
+        # Preserve collision/out-of-window facts instead of overwriting them.
+        return (-int(item.auto_confirm), -int("FULL_REFERENCE" in item.evidence.reason_codes), -layer_rank[item.layer])
+
     for proposal in proposals:
         existing = unique.get(proposal.participant_key)
-        if existing is None or layer_rank[proposal.layer] > layer_rank[existing.layer]:
+        if existing is None or priority(proposal) < priority(existing):
             unique[proposal.participant_key] = proposal
 
     ordered = sorted(
         unique.values(),
-        key=lambda item: (-int(item.auto_confirm), -layer_rank[item.layer], item.participant_key),
+        key=lambda item: (priority(item), item.participant_key),
     )
     for proposal in ordered:
         participant_conflict = bool(set(proposal.order_ids) & confirmed_orders) or bool(

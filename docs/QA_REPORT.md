@@ -1,5 +1,27 @@
 # Báo cáo nghiệm thu kỹ thuật
 
+## Matching và research đối chứng — Checkpoint C, 2026-10-20
+
+Checkpoint B đã push commit `b9c21117909dbbebe9fa24cae5ba5f61639be6ea`; GitHub Actions [39366948193](https://github.com/MinhHoang1403/ReconcileEngine/actions/runs/39366948193) có cả backend, frontend và containers success. Checkpoint C tiếp trên commit đó, không đổi default auto-confirm policy và không cài Splink/OR-Tools trong runtime ứng dụng.
+
+Đã đọc L1 graph/reference extraction, L2 amount/date, L3 RapidFuzz, L4 bounded search, resolver/allocation và review. Regression độc lập tái hiện trước sửa:
+
+- Bank memo `ORDER-A SHARED-PAYOUT`, trong khi hai orders cùng external ref `SHARED-PAYOUT`, vẫn auto-allocated 100.000 VND cho ORDER-A và nêu sai `NO_REFERENCE_COLLISION`. Sửa guard cho toàn connected component. Bốn ca sau sửa phủ L1/T+N và một/nhiều bank rows; không có allocation, evidence giữ collision.
+- Biên regex ASCII coi `ĐDH01` và `ЖDH01` chứa full token `DH01`; hai tests fail trước sửa. Guard chữ/số Unicode sửa lỗi, không mở rộng grammar separator hoặc chuyển ký tự nhìn giống nhau thành exact.
+- Khi collision làm strong L2 chỉ còn proposal, dedup chọn L3 đè mất evidence. Biến thể T+1 tái hiện việc mất `FULL_REFERENCE`; resolver giữ thứ tự chứng cứ đã có trong master plan. Không thay allocator. Engine property oracle mới dùng tổng capacity và kiểm tra từng order/bank, đảo thứ tự input và checksum.
+
+Baseline 32 golden/property tests đạt; sau sửa golden/property/reference focus 41 tests đạt. Regression cuối `uv run pytest -q`: **204 passed / 20,72 s**, hai warning môi trường cũ. Ruff check/format: đạt, **119 files**. Frontend lint/Vitest **20 passed**/TypeScript/Vite build đạt; Plotly chunk warning giữ nguyên. `research/.venv` khóa Splink 5.0.0/OR-Tools 9.15.6755; production `pyproject.toml`/`uv.lock` không đổi. Research metric/oracle arithmetic được test trong regression không cần cài hai thư viện này.
+
+Full-engine đối chứng trước/sau dùng cùng bytes đầu vào, policy và seed; demo/1.000 orders hard có từng tuple allocation giống nhau, cash demo 66.431.000 VND, candidate recall theo 1:1/N:1/1:N/M:N đều 100%, false auto 0 trên các bộ đó. Holdout F1 0,955556, hard full-truth F1 0,996481 không đổi. 36 sensitivity configs chỉ báo development và không dùng để đổi policy. Số tiền chưa tự xác nhận vẫn được tính vào allocation error, không che bằng cách bỏ truth edge chưa match.
+
+Splink/CP-SAT đã chạy thật, không chỉ đọc tài liệu: Splink khôi phục thêm một truth candidate so với fuzzy-only nhưng false candidates 15→45, thiếu tham số tên/default prior chưa hiệu chuẩn; không chọn tích hợp. CP-SAT tìm hết 40 nghiệm ở block 21 và 37 nghiệm khi bounded budget cạn; ca 1.581.580 nghiệm chỉ trả 5 (`FEASIBLE`), ca time budget 0 trả `UNKNOWN`, không coi là vô nghiệm. Tám subset fixtures và ví dụ hai M:N flow đều dùng integer. Số đo/timings/memory/limitations/lệnh tái lập tại `EVALUATION_REPORT.md`; không dùng solver output để auto-confirm hoặc allocation.
+
+Sáu HTTP/PostgreSQL oracles của `scripts/qa_matching.py` tại **Lab** đi đủ upload→mapping→Health→run→dashboard→Excel. Collision, collision/split, Unicode token, amount/date-only và M:N đều cash confirmed 0; N:1 control đúng 300.000 VND. Tất cả conservation true; XLSX mở lại đủ chín sheet, 17.990–18.709 bytes. Có guard từ chối URL chính trước request và unit test tương ứng. Evidence `reports/lab/matching-http-oracles.json` lưu từng run ID.
+
+Build backend `smartrecon-backend:lab-reference-audit`, frontend giữ image của B; ba service healthy, migration exit 0, không đổi schema. Edge 1440×900 run `d8ecebeb-76df-46be-98ec-abbcdf090fed` đi trọn demo→mapping→Health→dashboard→XLSX→approve/undo→reopen, conservation true, export 56.930 bytes, không lỗi console/runtime/network. Hai biểu đồ/bốn tab và layout không tràn ngang. Evidence `reports/lab/browser-reference.json`.
+
+Inventory `main-after-reference.json`/`lab-after-reference.json` đạt cả tám kiểm tra so với trước thí nghiệm: nội dung DB, artifacts, sample runs, container/image chính không đổi; health OK và network/volume độc lập. Không restart/migrate/update chính. Backup/drill của A được giữ nguyên. Gate C đạt trong bộ kiểm thử đã công bố; classification D, UX E và nghiệm thu tổng hợp/release F–G chưa được thay thế bằng kết quả này. Không đề xuất cutover tại thời điểm này.
+
 ## Mapping và validation — Checkpoint B, 2026-10-20
 
 Baseline `4dfd62e`; nghiên cứu tiếp trên `5adf729` và source mapping hash `cbae660c…76c0c`. Không sửa matching/allocation/migration. Thay đổi nằm ở `ingest/mapping.py`, `ingest/normalization.py`, service inspection, khởi tạo state frontend; thêm runner/cases/dependency lock dưới `research/`, regression tests và đo thao tác trong browser smoke.
