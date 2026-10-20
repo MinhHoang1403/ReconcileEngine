@@ -102,6 +102,8 @@ Hai file JSON trong `reports/` là runtime evidence theo máy và không đượ
 
 Nhánh `research/import-reconciliation` dùng worktree và Docker project `smartrecon_lab` riêng để nghiên cứu. Website lab ở `http://localhost:5174`, API lab ở `http://localhost:8002`; hệ thống chính 5173/8000 được giữ nguyên. Cấu hình, audit read-only và backup/drill có kiểm tra tính nhất quán được mô tả trong `docs/DEPLOYMENT.md`. Không chạy lệnh update/migration/stop đối với project chính từ worktree nghiên cứu.
 
+Benchmark schema mapping có đáp án synthetic độc lập và dependency lock riêng ở `research/`; xem lệnh tái lập/kết quả/giới hạn tại `docs/EVALUATION_REPORT.md`. Không cần cài dependency nghiên cứu để chạy ứng dụng hoặc regression suite. Client giữ ô chưa ghép khi mapping mơ hồ; profile chỉ tự áp dụng sau khi toàn bộ dòng qua validation. Dòng tổng báo cáo không tự trở thành giao dịch dù có ngày và tiền hợp lệ.
+
 - `docs/API_CONTRACT.md`: endpoints, DTO, mã lỗi, pagination và an toàn upload/export.
 - `docs/SMART_IMPORT_GUIDE.md`: cách nhận diện cấu trúc, xác nhận mapping, preview và quản lý import profile.
 - `docs/OPERATIONS.md`: hướng dẫn Windows/PowerShell, Docker Desktop/WSL2, restart và chẩn đoán.

@@ -89,6 +89,35 @@ Profile 1.000 orders giữ các hard cases được định nghĩa (ambiguous, N
 
 Sai số phân bổ 700.000 VND đến từ truth edges không được engine tự xác nhận do thiếu bằng chứng; chúng được đánh giá như prediction bằng 0. Các cạnh đã xác nhận đúng có sai số tiền bằng 0. Cách tính này tránh báo cáo sai lệch bằng 0 bằng cách chỉ nhìn các cạnh đã match.
 
+## Đối chứng mapping trong Lab — 2026-10-20
+
+Baseline core là `4dfd62e3bf8289477e291463f5afa4b41c0505d4`, không đổi policy/ngưỡng matching. `research/mapping_cases.py` chứa 24 bảng synthetic độc lập, 35 đáp án cặp cột và 15 quyết định bắt buộc abstain. Hash dataset/đáp án/config: `0254079b10a208b30c7d450f2a8b0e3f948011d0034ac130a50dce2b516362ec`. Mỗi matcher nhận đầy đủ business contract, không nhận đáp án hoặc danh sách trường kỳ vọng riêng của fixture. Split credit/debit được test transformation riêng, không tính hai trường derived thành direct mapping.
+
+| Phương pháp | Đúng/sai/bỏ sót cặp | Precision | Recall | Coverage tự chọn | Quyết định thủ công (proxy) | Median mỗi bảng | Peak Python bytes |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| Baseline | 34 / 7 / 1 | 82,93% | 97,14% | 82% | 16 | 4,84 ms | 38.198 |
+| Current đã sửa | 35 / 0 / 0 | 100% | 100% | 70% | 15 | 9,59 ms | 38.088 |
+| Valentine COMA | 21 / 20 / 14 | 51,22% | 60% | 82% | 29 | 50,54 ms | 150.658 |
+| Current ∩ COMA | 21 / 0 / 14 | 100% | 60% | 42% | 29 | 52,97 ms | 152.054 |
+
+Precision = đúng/(đúng+sai), recall = đúng/(đúng+bỏ sót), coverage = số cặp tự chọn/50 quyết định khai báo, proxy thủ công = bỏ sót + 15 quyết định abstain. Proxy không đo công sức người dùng và không tính công sửa những lựa chọn sai; không suy thành click thật. Baseline coverage cao hơn nhưng bao gồm bảy quyết định không an toàn: tiền rỗng/sai kiểu/đuôi dữ liệu sai/profile drift/signed không quy ước và ngày sai. Candidate phục hồi một fee mapping bị weak ID candidate chiếm cột, không mở rộng ngưỡng hoặc suy tiền từ phép cộng.
+
+Mỗi case warmup một lần, đo năm lần bằng `perf_counter`/`tracemalloc`; median tổng 120 lần. Windows, Ryzen 5 7535HS (6 cores/12 threads), Python 3.12.14, Pandas 2.3.3, RapidFuzz 3.14.6, DuckDB 1.5.6; Valentine 1.1.0 chỉ trong `research/.venv`. `tracemalloc` không đo RSS/native memory và bỏ import warmup. Mapping source SHA-256 baseline `c7eaca1a177bbff9581e6ef55a1a73835d3789720bac989ca2ca873bc4e60b8d`; candidate `cbae660cd64186c99ca66944d9b93df1010d0feb40d87c93da6dee7939b76c0c`. JSON lưu tại `reports/lab/mapping-{baseline,candidate,coma,hybrid}.json`. Đây là benchmark synthetic nhỏ, không chứng minh accuracy trên nguồn tài chính thật; tập gắn nhãn holdout trong bộ nhỏ chỉ là regression chưa dùng để chỉnh ngưỡng, không phải external validation.
+
+Kết luận: giữ heuristic đã sửa và validation hiện có; không tích hợp COMA hay dependency nghiên cứu vào production. Chất lượng quyết định tăng nhưng thời gian mapping tăng khoảng 4,75 ms/case trên phép đo này; không tuyên bố cải thiện tốc độ. Global assignment giữ thuật toán xác định đơn giản, không cho weak type-only guess giữ chỗ của semantic match. Fixture cấu trúc riêng phủ header lệch/hai hàng/multi-sheet/ambiguous-sheet/unnamed/footer; integration phủ CSV/XLSX Việt/Anh/không dấu, leading zeros, toàn bộ dòng và dòng tổng. Sato chỉ là tham khảo về ngữ cảnh, không chạy model.
+
+Tái lập trên nhánh nghiên cứu (đường dẫn baseline chỉ đọc):
+
+```powershell
+uv sync --project research --frozen
+research/.venv/Scripts/python.exe research/mapping_evaluation.py --method current --core-source C:/Work/ReconcileEngine/src --repeats 5 --output reports/lab/mapping-baseline.json
+research/.venv/Scripts/python.exe research/mapping_evaluation.py --method current --repeats 5 --output reports/lab/mapping-candidate.json
+research/.venv/Scripts/python.exe research/mapping_evaluation.py --method coma --repeats 5 --output reports/lab/mapping-coma.json
+research/.venv/Scripts/python.exe research/mapping_evaluation.py --method hybrid --repeats 5 --output reports/lab/mapping-hybrid.json
+```
+
+Trên Linux dùng `research/.venv/bin/python`. Runner ghi path/hash/source commit/dirty state để tránh vô tình import editable package từ worktree khác. Không truyền truth vào mapping runtime.
+
 ## Tái lập
 
 Notebook chính là `notebooks/reconciliation_research.ipynb`. Kiểm thử dùng kernel sạch, working directory tương đối và chạy mọi cell bằng `nbclient`; notebook đã được thực thi và lưu output thực. Dependency được khóa trong `uv.lock`. Script evaluation ghi manifest, seed, dataset hashes, policy snapshot, phần cứng và commit hiện hành vào JSON output. Runtime artifact nằm trong `reports/` và bị Git ignore để tránh commit dữ liệu chạy tùy máy; bảng kết quả kiểm chứng được version hóa trong tài liệu này.

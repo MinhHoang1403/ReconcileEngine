@@ -22,6 +22,12 @@ Không tự đổi `GROSS_SETTLEMENT` thành cash, không tự tạo ID giao d�
 
 Import profile đã lưu gắn với fingerprint SHA-256 của schema hai feed, gồm tên/cấu trúc cột theo thứ tự, độ sâu header và delimiter, cùng `schema_version`. Profile chỉ được tái sử dụng khi cả fingerprint và version khớp; structure drift không được áp dụng gần đúng. Profile có thể sửa/xóa qua API, nhưng cập nhật mapping chỉ nhận một upload session có cùng schema.
 
+Fingerprint không chứng minh ngữ nghĩa của giá trị. Trước khi tái áp dụng profile, hệ thống chuẩn hóa **toàn bộ** dòng bằng cấu hình đã lưu; có lỗi `BLOCKING` thì không áp dụng profile, trả `reuse_issue_codes` và dùng phân tích hiện tại. Không sửa/xóa profile cũ. Gợi ý compatibility `suggested_mapping` không được điền lại trường mà `mapping_suggestions.selected_mapping` đã abstain (không tự quyết định). Frontend không coi alias legacy là bằng chứng tự chọn.
+
+Mapping dùng tối đa 100 vị trí trải đều trên bảng làm bằng chứng và tối đa 5 ví dụ hiển thị; đây không phải kiểm tra toàn bộ dữ liệu. Cột tiền/ngày rỗng, có giá trị mẫu không đọc được hoặc cần quy ước dấu không được tự chọn chỉ nhờ tên/profile. Health Gate vẫn kiểm tra mọi dòng, kể cả dòng không được lấy mẫu. Điểm heuristic không phải xác suất đã hiệu chuẩn.
+
+Dòng có nhãn tổng báo cáo được structure detector đánh dấu phải bị chặn khi chuẩn hóa, kể cả có ngày/số tiền hợp lệ và `confirmed_structure=true`. Xác nhận sheet/header không phê duyệt dòng tổng thành giao dịch. Raw row/hash vẫn giữ nguyên; rejection lưu dòng nguồn. Chỉ sửa nguồn hoặc loại trừ tường minh kèm lý do mới giải quyết lỗi này; không tự xóa dòng.
+
 ## Khoản phải thu
 
 Trường bắt buộc:

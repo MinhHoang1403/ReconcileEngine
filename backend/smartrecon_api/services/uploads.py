@@ -22,6 +22,7 @@ from backend.smartrecon_api.services.artifacts import (
     upload_directory,
 )
 from backend.smartrecon_api.services.serialization import to_jsonable
+from smartrecon.domain.statuses import Severity
 from smartrecon.ingest.eda import eda_to_dict, summarize_raw, summarize_standardized
 from smartrecon.ingest.health import Exclusion, apply_exclusions, build_health_report
 from smartrecon.ingest.mapping import (
@@ -32,7 +33,6 @@ from smartrecon.ingest.mapping import (
     MappingConfig,
     analyze_mapping,
     default_demo_mapping,
-    suggest_mapping,
 )
 from smartrecon.ingest.normalization import NormalizedBundle, normalize_bundle
 from smartrecon.ingest.profiles import SCHEMA_VERSION, recognize_profiles, schema_fingerprint, source_schema
@@ -117,6 +117,16 @@ def _persist_inspection(
     )
     if not isinstance(matched_profile, ImportProfile):
         matched_profile = None
+    profile_reuse_issues: list[str] = []
+    if mapping is None and matched_profile is not None:
+        profile_input = normalize_bundle(raw, mapping_from_request(matched_profile.mapping_snapshot))
+        profile_reuse_issues = sorted(
+            {issue.code for issue in profile_input.issues if issue.severity is Severity.BLOCKING}
+        )
+        if profile_reuse_issues:
+            # A schema hash cannot establish that the current values still respect
+            # the saved date, money and direction assumptions. Validate all rows.
+            matched_profile = None
     effective_mapping = mapping
     if effective_mapping is None and matched_profile is not None:
         effective_mapping = mapping_from_request(matched_profile.mapping_snapshot)
@@ -134,16 +144,10 @@ def _persist_inspection(
         required_fields=BANK_REQUIRED,
         profile_mapping=effective_mapping.bank_columns if effective_mapping else None,
     )
-    order_suggestions = suggest_mapping(
-        list(raw.orders.frame.columns),
-        ORDER_REQUIRED
-        | {"currency", "order_status", "external_ref", "customer_name", "payment_channel", "description"},
-    )
-    bank_suggestions = suggest_mapping(
-        list(raw.bank_transactions.frame.columns),
-        BANK_REQUIRED
-        | {"currency", "txn_ref", "value_date", "description", "sender_name", "channel", "batch_ref", "declared_fee"},
-    )
+    # Compatibility response must preserve abstentions from the same analysis;
+    # a second alias-only decision path would silently reselect ambiguous columns.
+    order_suggestions = order_analysis.selected_mapping
+    bank_suggestions = bank_analysis.selected_mapping
     if effective_mapping:
         order_suggestions = effective_mapping.order_columns
         bank_suggestions = effective_mapping.bank_columns
@@ -232,6 +236,7 @@ def _persist_inspection(
             "recognized": built_in_profiles,
             "saved_profile": saved_profile,
             "applied": matched_profile is not None,
+            "reuse_issue_codes": profile_reuse_issues,
         },
     }
 

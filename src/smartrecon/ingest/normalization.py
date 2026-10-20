@@ -311,6 +311,10 @@ def normalize_bundle(raw: RawSourceBundle, mapping: MappingConfig) -> Normalized
         row_number = raw.orders.source_row_numbers[position]
         row_digest = _row_hash(row)
         try:
+            # Confirming a sheet/header is not approval to count a report total.
+            # Keep the raw row and require an explicit, audited exclusion or source correction.
+            if row_number in raw.orders.structure.possible_footer_rows:
+                raise ValueError("Dòng có nhãn tổng báo cáo; cần kiểm tra và loại trừ có lý do hoặc sửa nguồn")
             order_id = normalize_identifier(row[mapping.order_columns["order_id"]])
             if not order_id:
                 raise ValueError("order_id bị trống")
@@ -359,6 +363,8 @@ def normalize_bundle(raw: RawSourceBundle, mapping: MappingConfig) -> Normalized
         row_number = raw.bank_transactions.source_row_numbers[position]
         row_digest = _row_hash(row)
         try:
+            if row_number in raw.bank_transactions.structure.possible_footer_rows:
+                raise ValueError("Dòng có nhãn tổng báo cáo; cần kiểm tra và loại trừ có lý do hoặc sửa nguồn")
             bank_id = normalize_identifier(row[mapping.bank_columns["bank_txn_id"]])
             if not bank_id:
                 raise ValueError("bank_txn_id bị trống")

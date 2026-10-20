@@ -1,5 +1,29 @@
 # Báo cáo nghiệm thu kỹ thuật
 
+## Mapping và validation — Checkpoint B, 2026-10-20
+
+Baseline `4dfd62e`; nghiên cứu tiếp trên `5adf729` và source mapping hash `cbae660c…76c0c`. Không sửa matching/allocation/migration. Thay đổi nằm ở `ingest/mapping.py`, `ingest/normalization.py`, service inspection, khởi tạo state frontend; thêm runner/cases/dependency lock dưới `research/`, regression tests và đo thao tác trong browser smoke.
+
+Các lỗi đã chạy test fail trước sửa:
+
+- `Amount Due` + `Balance Due`: backend abstain nhưng `initialMapping` trộn alias legacy, frontend nhận `Amount Due`; test đòi ô trống đã fail. Sau sửa cả API compatibility lẫn client giữ abstention; nút tiếp tục bị khóa cho đến lựa chọn tường minh.
+- Chỉ năm giá trị đầu được dùng làm bằng chứng: tên tiền đúng/đuôi sai, cột rỗng và profile với giá trị sai đều auto-selected. Ba regression fail trước sửa; sau sửa lấy tối đa 100 vị trí trải đều, không cho profile bỏ qua type/ambiguity validation.
+- Required ID không có evidence chiếm `Fee Amount`, làm mất fee mapping rõ nghĩa: regression fail trước sửa, pass sau khi weak candidate không giữ chỗ.
+- Schema profile khớp nhưng amount chứa text: API regression fail trước sửa; sau sửa chuẩn hóa tất cả dòng trước khi tái dùng profile, không áp dụng nếu có blocking issues.
+- Dòng `Total` có ngày/amount hợp lệ đi vào canonical và Health `READY`, ở cả CSV/XLSX. Hai regression fail trước sửa, pass sau guard trong core; raw giữ nguyên, rejection có dòng/hash, phải loại trừ có lý do hoặc sửa nguồn. `confirmed_structure=true` không bypass.
+
+Regression: `uv run pytest -q` đạt **192 passed** trong **32,13 s**, gồm 24 mapping answers, 20 validation cases CSV/XLSX (131 dòng/case, lỗi ở dòng nguồn 75), hai footer cases và sáu source variants. Toàn bộ golden/property/API/integration/notebook cũ vẫn chạy; chỉ hai warning Starlette/httpx và Windows ZMQ đã biết. `uv run ruff check .` và `ruff format --check .`: đạt, 113 files. Frontend ESLint đạt, Vitest **20 passed**, TypeScript/Vite build đạt; Plotly chunk 1,55 MB là warning cũ.
+
+Đối chứng COMA/candidate/baseline cùng 24 fixtures, hash/source/version/warmup/năm lần đo và kết quả đúng/sai/coverage/runtime/memory được ghi tại `EVALUATION_REPORT.md`. Candidate 35 đúng/0 sai; baseline 34 đúng/7 sai; COMA 21 đúng/20 sai; giao Current–COMA 21 đúng/0 sai nhưng bỏ sót 14. Không đưa Valentine, Sato hay Pandera vào runtime. Pandera được đánh giá về coverage/adapter, không có thí nghiệm hiệu năng Pandera và không tuyên bố có.
+
+Docker Lab build hai image `lab-mapping-cbae660cd641` thực sự, migration exit 0 (không đổi schema), cả ba service healthy. Browser Edge 1440×900 chạy baseline run `22ecb3c8-0b3c-4c3b-b427-dd6ef24a3061` và candidate run `9e4d3524-7f63-43e2-b55a-bf5714d867c4`: import → mapping → Health → run → dashboard → XLSX → approve/undo → reopen, không lỗi console/runtime/network. Candidate XLSX 56.941 bytes, sau approve 57.104 bytes; conservation true ở các revisions được đọc. Đầu vào demo cần **2 lần bấm để tới Health, 0 thay đổi trường, 0 mở advanced** ở cả baseline/candidate. Thời gian automation lần lượt 6,47 s/1,88 s; khác cache/build/load nên **không kết luận cải thiện tốc độ UX**. Đây là thao tác tự động, không nghiên cứu người dùng thật. Evidence candidate/ảnh trong `reports/lab/browser-mapping-candidate*`.
+
+Sau build, inventory `main-after-mapping.json` và `lab-after-mapping.json` so với `main-before.json` đạt cả tám kiểm tra: nội dung DB/artifacts/sample runs/container/image chính không đổi, hai health OK, volumes/networks không giao nhau. Không restart/migrate/dừng hệ thống chính. Backup và restore drill hợp lệ của checkpoint A vẫn được giữ nguyên, chưa thay bằng backup của candidate.
+
+Đường dẫn chủ dự án cung cấp `C:\Work\ReconcileEngine\data\demo\vn_synthetic_demo` được đọc thật: **100 orders / 98 bank rows**, không phải 380/362. SHA-256 bytes CSV tại đường dẫn đó: orders `b0bcaf7bbc6bf6c3da3e735e2d13b7bc2efba945ba0fd7708ea10e40a500e909`; bank `1877c0ff70a4b6f06cf628af0406d0ce5cd87ea29d8a41e106a5510a34254f32`. Không đổi tên/cam kết đã đánh giá bộ 380/362. Bộ demo này tiếp tục được đưa vào đối chứng tổng hợp; không đọc ground truth trong runtime.
+
+Gate B đạt trong phạm vi fixture và kiểm tra thực thi trên Lab. Không có tuyên bố accuracy phổ quát hoặc usability với người dùng thật. C–G còn tiếp tục; chưa đủ điều kiện cutover.
+
 ## Môi trường nghiên cứu độc lập — Checkpoint A, 2026-10-20
 
 Baseline source: `4dfd62e3bf8289477e291463f5afa4b41c0505d4`. Worktree chính ở `C:\Work\ReconcileEngine`, nhánh `main`, chỉ có `a_website_first/` untracked được giữ nguyên. Worktree nghiên cứu ở `C:\Work\ReconcileEngine-Lab`, nhánh `research/import-reconciliation`. Không cập nhật/migrate/restart stack chính và không push `main`.

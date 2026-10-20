@@ -171,3 +171,40 @@ def test_explicit_credit_debit_pair_is_suggested_as_a_traceable_transformation()
         assert suggestion.status == "auto-selected"
         assert suggestion.transformation == specification
         assert suggestion.source_column is None
+
+
+def test_clear_amount_header_cannot_override_invalid_values_after_first_five_rows() -> None:
+    frame = pd.DataFrame({"expected_amount": ["1000"] * 5 + ["not money"] * 15})
+    analysis = analyze_mapping(frame, {"expected_amount"}, feed="orders", required_fields={"expected_amount"})
+    assert "expected_amount" not in analysis.selected_mapping
+
+
+def test_profile_does_not_override_observed_invalid_money_values() -> None:
+    frame = pd.DataFrame({"previously confirmed": ["not money", "still not money"]})
+    analysis = analyze_mapping(
+        frame,
+        {"expected_amount"},
+        feed="orders",
+        required_fields={"expected_amount"},
+        profile_mapping={"expected_amount": "previously confirmed"},
+    )
+    assert "expected_amount" not in analysis.selected_mapping
+
+
+def test_blank_named_amount_column_is_not_auto_selected() -> None:
+    frame = pd.DataFrame({"expected_amount": [None, "", " "]})
+    analysis = analyze_mapping(frame, {"expected_amount"}, feed="orders", required_fields={"expected_amount"})
+    assert "expected_amount" not in analysis.selected_mapping
+
+
+def test_unsupported_required_id_cannot_reserve_a_clear_fee_column() -> None:
+    from smartrecon.ingest.mapping import BANK_FIELDS
+
+    analysis = analyze_mapping(
+        pd.DataFrame({"Net Amount": ["98000", "196000"], "Fee Amount": ["2000", "4000"]}),
+        BANK_FIELDS,
+        feed="bank_transactions",
+        required_fields=BANK_REQUIRED,
+    )
+    assert "bank_txn_id" not in analysis.selected_mapping
+    assert analysis.selected_mapping["declared_fee"] == "Fee Amount"

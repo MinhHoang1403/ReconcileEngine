@@ -128,6 +128,7 @@ def main() -> None:
     parser.add_argument("--height", type=int, default=900)
     parser.add_argument("--screenshot-dir", type=Path)
     parser.add_argument("--all-stages", action="store_true")
+    parser.add_argument("--output", type=Path)
     args = parser.parse_args()
 
     port = free_port()
@@ -188,11 +189,24 @@ def main() -> None:
         assert source_evidence["scrollWidth"] <= source_evidence["width"]
         assert source_evidence["externalFonts"] == 0
 
+        # Scripted interaction counts are reproducible QA evidence, not a human usability study.
+        devtools.evaluate(
+            "window.importInteractions = {buttons: [], changes: 0, advanced: 0, started: performance.now()}; "
+            "document.addEventListener('click', e => { const b = e.target.closest('button'); "
+            "if (b) window.importInteractions.buttons.push(b.textContent.trim()); "
+            "if (e.target.closest('summary')) window.importInteractions.advanced += 1; }); "
+            "document.addEventListener('change', () => window.importInteractions.changes += 1);"
+        )
         click_button(devtools, "Sử dụng dữ liệu mẫu")
         wait_until(devtools, "document.body.innerText.includes('Kiểm tra và chuẩn hóa dữ liệu')")
         capture(devtools, stage_path("mapping"))
         click_button(devtools, "Xác nhận và chuẩn hóa dữ liệu")
         wait_until(devtools, "document.body.innerText.includes('Dữ liệu sẵn sàng đối soát')")
+        import_interactions = devtools.evaluate(
+            "({...window.importInteractions, "
+            "elapsedMilliseconds: performance.now() - window.importInteractions.started})"
+        )
+        assert import_interactions["changes"] == 0
         capture(devtools, stage_path("health"))
         click_button(devtools, "Xem dòng dữ liệu liên quan")
         wait_until(devtools, "document.body.innerText.includes('Chi tiết vấn đề dữ liệu')")
@@ -441,6 +455,7 @@ def main() -> None:
         evidence.update(
             {
                 "run_id": run_id,
+                "scripted_import_interactions": import_interactions,
                 "export": export_evidence,
                 "reopen_verified": True,
                 "source": source_evidence,
@@ -455,6 +470,9 @@ def main() -> None:
                 "screenshots": screenshots,
             }
         )
+        if args.output:
+            args.output.parent.mkdir(parents=True, exist_ok=True)
+            args.output.write_text(json.dumps(evidence, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         print(json.dumps(evidence, ensure_ascii=False))
     finally:
         if devtools:

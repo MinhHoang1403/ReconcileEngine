@@ -256,8 +256,11 @@ class _ScoredColumn:
 
 
 def _values(frame: pd.DataFrame, column: str, limit: int = 100) -> list[str]:
+    """Sample across the entire table; display examples are not the evidence sample."""
     values: list[str] = []
-    for value in frame[column].head(limit).tolist():
+    count = len(frame)
+    positions = list(range(count)) if count <= limit else [index * (count - 1) // (limit - 1) for index in range(limit)]
+    for value in frame[column].iloc[positions].tolist():
         if value is None or pd.isna(value):
             continue
         text = " ".join(unicodedata.normalize("NFKC", str(value)).strip().split())
@@ -294,6 +297,8 @@ def _money_ratio(values: list[str]) -> tuple[float, bool]:
     ambiguous = False
     for value in values:
         compact = value.replace(" ", "")
+        if compact.startswith("-"):
+            ambiguous = True
         if re.fullmatch(r"[-+]?\d{1,3},\d{3}", compact):
             ambiguous = True
         candidates = {compact, compact.replace(",", ""), compact.replace(".", "").replace(",", ".")}
@@ -304,8 +309,7 @@ def _money_ratio(values: list[str]) -> tuple[float, bool]:
 
 def _is_decimal(value: str) -> bool:
     try:
-        Decimal(value)
-        return True
+        return Decimal(value).is_finite()
     except InvalidOperation:
         return False
 
@@ -337,18 +341,20 @@ def _name_evidence(column: str, canonical: str) -> tuple[int, list[str]]:
 
 def _value_evidence(canonical: str, values: list[str]) -> tuple[int, list[str], bool]:
     if not values:
-        return 0, ["Cột không có giá trị mẫu để kiểm tra"], False
+        return 0, ["Cột không có giá trị mẫu để kiểm tra"], True
     reasons: list[str] = []
     ambiguous = False
     score = 0
     if canonical in {"ordered_at", "txn_date", "value_date"}:
         ratio, ambiguous = _date_ratio(values)
+        ambiguous = ambiguous or ratio < 1
         score = round(24 * ratio)
         reasons.append(f"{round(ratio * 100)}% giá trị mẫu đọc được như ngày")
         if ambiguous:
             reasons.append("Có ngày dạng ngày/tháng có thể hiểu theo hai locale")
     elif canonical in {"expected_amount", "posted_amount", "declared_fee"}:
         ratio, ambiguous = _money_ratio(values)
+        ambiguous = ambiguous or ratio < 1
         score = round(22 * ratio)
         reasons.append(f"{round(ratio * 100)}% giá trị mẫu có hình dạng số tiền")
         if ambiguous:
@@ -359,18 +365,22 @@ def _value_evidence(canonical: str, values: list[str]) -> tuple[int, list[str], 
         reasons.append(f"Độ duy nhất trong mẫu là {round(unique_ratio * 100)}%")
     elif canonical == "direction":
         ratio = _enum_ratio(values, _DIRECTION_VALUES)
+        ambiguous = ratio < 1
         score = round(26 * ratio)
         reasons.append(f"{round(ratio * 100)}% giá trị mẫu là ký hiệu tiền vào/ra đã biết")
     elif canonical == "amount_basis":
         ratio = _enum_ratio(values, _BASIS_VALUES)
+        ambiguous = ratio < 1
         score = round(26 * ratio)
         reasons.append(f"{round(ratio * 100)}% giá trị mẫu nêu rõ cơ sở số tiền")
     elif canonical == "currency":
         ratio = _enum_ratio(values, _CURRENCY_VALUES)
+        ambiguous = ratio < 1
         score = round(24 * ratio)
         reasons.append(f"{round(ratio * 100)}% giá trị mẫu là mã tiền tệ hỗ trợ")
     elif canonical == "order_status":
         ratio = _enum_ratio(values, _STATUS_VALUES)
+        ambiguous = ratio < 1
         score = round(22 * ratio)
         reasons.append(f"{round(ratio * 100)}% giá trị mẫu giống trạng thái đơn hàng")
     elif canonical in {"description", "customer_name", "sender_name"}:
@@ -389,16 +399,18 @@ def _score_column(
     canonical: str,
     profile_mapping: dict[str, str] | None,
 ) -> _ScoredColumn:
-    samples = tuple(_values(frame, column)[:5])
+    evidence_values = _values(frame, column)
+    samples = tuple(evidence_values[:5])
+    value_score, value_reasons, ambiguous = _value_evidence(canonical, evidence_values)
     if profile_mapping and profile_mapping.get(canonical) == column:
         return _ScoredColumn(
             column,
             100,
-            ("Khớp profile nhập liệu đã được người dùng xác nhận",),
+            ("Khớp profile nhập liệu đã được người dùng xác nhận", *value_reasons),
             samples,
+            ambiguous,
         )
     name_score, reasons = _name_evidence(column, canonical)
-    value_score, value_reasons, ambiguous = _value_evidence(canonical, list(samples))
     if name_score == 0 and value_score < 18:
         return _ScoredColumn(column, 0, tuple(reasons + value_reasons), samples, ambiguous)
     score = min(100, name_score + value_score)
@@ -446,7 +458,10 @@ def analyze_mapping(
         )
         if selected_candidate and selected_candidate.score > 0:
             selected[canonical] = selected_candidate
-            assigned_sources.add(selected_candidate.source_column)
+            # Weak type-only guesses must not reserve a column from an explicit
+            # semantic match later in the table assignment (e.g. missing ID vs fee).
+            if selected_candidate.score >= 60 and not selected_candidate.ambiguous_values:
+                assigned_sources.add(selected_candidate.source_column)
 
     suggestions: list[MappingSuggestion] = []
     selected_mapping: dict[str, str] = {}

@@ -43,6 +43,12 @@ def test_import_profile_crud_reuse_and_schema_drift_protection(tmp_path: Path, m
     app.dependency_overrides[get_db] = test_db
     try:
         with TestClient(app) as client:
+            ambiguous = _inspect(
+                client,
+                b"order_id,ordered_at,Amount Due,Balance Due\nO-1,2026-10-17,1000,1000\n",
+            )
+            assert "expected_amount" not in ambiguous["suggested_mapping"]["order_columns"]
+            assert "expected_amount" not in ambiguous["mapping_suggestions"]["orders"]["selected_mapping"]
             inspection = _inspect(client)
             assert inspection["import_profile"]["applied"] is False
             mapping = {
@@ -107,6 +113,13 @@ def test_import_profile_crud_reuse_and_schema_drift_protection(tmp_path: Path, m
             )
             assert drifted["import_profile"]["applied"] is False
             assert drifted["import_profile"]["saved_profile"] is None
+
+            semantic_drift = _inspect(
+                client,
+                b"order_id,ordered_at,expected_amount\nO-1,2026-10-17,gross report only\n",
+            )
+            assert semantic_drift["import_profile"]["applied"] is False
+            assert semantic_drift["import_profile"]["saved_profile"] is None
 
             deleted = client.delete(f"/api/import-profiles/{profile['id']}")
             assert deleted.status_code == 204

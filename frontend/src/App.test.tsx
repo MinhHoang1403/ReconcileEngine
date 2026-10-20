@@ -55,3 +55,26 @@ test("hiển thị và cho phép đóng lỗi API", async () => {
   fireEvent.click(screen.getByRole("button", { name: "Đóng thông báo lỗi" }));
   await waitFor(() => expect(screen.queryByRole("alert")).not.toBeInTheDocument());
 });
+
+test("không điền cột tiền bằng gợi ý cũ khi bộ phân tích yêu cầu xác nhận", async () => {
+  const prepared = {
+    ...inspection,
+    raw_eda: { ...inspection.raw_eda, orders: { ...inspection.raw_eda.orders, columns: ["order_id", "ordered_at", "Amount Due", "Balance Due"] } },
+    suggested_mapping: { ...inspection.suggested_mapping, order_columns: { order_id: "order_id", ordered_at: "ordered_at", expected_amount: "Amount Due" } },
+    mapping_suggestions: {
+      orders: {
+        suggestions: [{ canonical_target: "expected_amount", source_column: "Amount Due", transformation: { type: "DIRECT" }, heuristic_score: 100, confidence: "HIGH", reasons: ["Hai cột tiền cùng nghĩa có điểm ngang nhau"], competitors: [{ source_column: "Balance Due", heuristic_score: 100, reasons: [] }], sample_before: [], sample_after: [], status: "needs-review" }],
+        selected_mapping: { order_id: "order_id", ordered_at: "ordered_at" }, selected_transformations: {},
+        required_total: 3, required_auto_selected: 2, required_needs_review: 1, required_unsupported: 0,
+      },
+      bank_transactions: { suggestions: [], selected_mapping: inspection.suggested_mapping.bank_columns, selected_transformations: {}, required_total: 5, required_auto_selected: 5, required_needs_review: 0, required_unsupported: 0 },
+    },
+  };
+  vi.spyOn(globalThis, "fetch").mockImplementation((input) => Promise.resolve(new Response(JSON.stringify(String(input) === "/healthz" ? { status: "ok", database: "ok" } : prepared), { status: 200 })));
+  render(<App />);
+  fireEvent.click(await screen.findByRole("button", { name: "Sử dụng dữ liệu mẫu" }));
+  await screen.findByRole("heading", { name: "Kiểm tra và chuẩn hóa dữ liệu" });
+  const amount = screen.getByRole("combobox", { name: /Số tiền cần thu/ });
+  expect(amount).toHaveValue("");
+  expect(screen.getByRole("button", { name: "Xác nhận và chuẩn hóa dữ liệu" })).toBeDisabled();
+});

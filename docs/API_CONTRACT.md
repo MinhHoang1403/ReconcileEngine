@@ -2,6 +2,8 @@
 
 API HTTP không gắn nhãn phiên bản trong path. OpenAPI tương tác có tại `/docs`; schema máy đọc tại `/openapi.json`. Mọi số tiền nghiệp vụ đều là integer minor units kèm currency của run, không dùng `float`.
 
+Inspection trả `suggested_mapping` tương thích nhưng không bổ sung alias vào các trường mà phân tích ngữ nghĩa yêu cầu review. `mapping_suggestions.*.selected_mapping` và transformations là nguồn quyết định tự chọn; nếu thiếu phân tích, client phải yêu cầu xác nhận thay vì tự gán độ tin cậy cao. `import_profile.reuse_issue_codes` liệt kê mã lỗi `BLOCKING` khi schema khớp nhưng dữ liệu hiện tại không qua chuẩn hóa bằng cấu hình profile; `applied=false` trong trường hợp đó.
+
 ## Luồng chuẩn
 
 1. `POST /api/demo/datasets` hoặc `POST /api/uploads/inspect` để tạo upload session bất biến và nhận raw EDA/mapping gợi ý.

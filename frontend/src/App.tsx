@@ -16,15 +16,15 @@ import "./styles.css";
 function inspectionDefaults(value: Inspection): Inspection {
   const fallbackAnalysis = (selected: Record<string, string>, requiredTotal: number) => ({
     suggestions: Object.entries(selected).map(([canonical_target, source_column]) => ({
-      canonical_target, source_column, transformation: { type: "DIRECT" }, heuristic_score: 100,
-      confidence: "HIGH" as const, reasons: ["Tên cột khớp rõ ràng"], competitors: [],
-      sample_before: [], sample_after: [], status: "auto-selected" as const,
+      canonical_target, source_column, transformation: { type: "DIRECT" }, heuristic_score: 0,
+      confidence: "LOW" as const, reasons: ["API chưa cung cấp đủ bằng chứng; cần xác nhận cột nguồn"], competitors: [],
+      sample_before: [], sample_after: [], status: "needs-review" as const,
     })),
-    selected_mapping: selected,
+    selected_mapping: {},
     selected_transformations: {},
     required_total: requiredTotal,
-    required_auto_selected: requiredTotal,
-    required_needs_review: 0,
+    required_auto_selected: 0,
+    required_needs_review: requiredTotal,
     required_unsupported: 0,
   });
   const fallbackStructure = (columns: string[]) => ({
@@ -58,8 +58,8 @@ function inspectionDefaults(value: Inspection): Inspection {
 const initialMapping = (inspection: Inspection): MappingState => {
   if (inspection.import_profile.saved_profile) return inspection.import_profile.saved_profile.mapping_snapshot;
   return {
-  order_columns: { ...inspection.suggested_mapping.order_columns, ...inspection.mapping_suggestions.orders.selected_mapping },
-  bank_columns: { ...inspection.suggested_mapping.bank_columns, ...inspection.mapping_suggestions.bank_transactions.selected_mapping },
+  order_columns: { ...inspection.mapping_suggestions.orders.selected_mapping },
+  bank_columns: { ...inspection.mapping_suggestions.bank_transactions.selected_mapping },
   currency: "VND",
   source_profile: "BANK_CREDIT",
   date_format: "AUTO",
@@ -103,7 +103,7 @@ export function App() {
   const [saveProfile, setSaveProfile] = useState(false);
   const [profileName, setProfileName] = useState("");
   const [busy, setBusy] = useState(false);
-  const [mappingValid, setMappingValid] = useState(true);
+  const [mappingValid, setMappingValid] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -131,6 +131,7 @@ export function App() {
     const prepared = inspectionDefaults(value);
     setInspection(prepared);
     setMapping(initialMapping(prepared));
+    setMappingValid(false);
     setHealth(null);
     setSaveProfile(false);
     setProfileName("");

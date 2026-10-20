@@ -7,7 +7,7 @@ Yêu cầu mới được triển khai trên nhánh `research/import-reconciliat
 | Checkpoint của đợt nghiên cứu | Trạng thái |
 |---|---|
 | A — Lab độc lập và backup/restore | Đã có bằng chứng cách ly, restore và baseline; xem QA_REPORT |
-| B — Auto mapping, Valentine/COMA và validation | Chưa nghiệm thu |
+| B — Auto mapping, Valentine/COMA và validation | Đạt trên fixture độc lập và Lab; 192 Python/20 frontend tests, xem QA/EVALUATION_REPORT |
 | C — Matching, Splink/CP-SAT và đối chứng | Chưa nghiệm thu |
 | D — Classification và residual theo cấp nghiệp vụ | Chưa nghiệm thu |
 | E — Workflow gần một nút và usability | Chưa nghiệm thu |
