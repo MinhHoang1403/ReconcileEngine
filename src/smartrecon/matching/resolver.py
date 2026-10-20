@@ -116,7 +116,9 @@ def resolve_groups(
             )
         )
 
-    payment_statuses = derive_payment_statuses(orders, banks, allocations, adjustments, candidates, confirmed_banks)
+    payment_statuses = derive_payment_statuses(
+        orders, banks, allocations, adjustments, candidates, confirmed_banks, groups
+    )
     groups = [
         MatchGroup(
             group_id=group.group_id,
@@ -223,11 +225,18 @@ def derive_payment_statuses(
     adjustments: list[VerifiedAdjustment],
     candidates: list[Candidate] | tuple[Candidate, ...],
     confirmed_bank_ids: set[str] | frozenset[str],
+    groups: list[MatchGroup] | tuple[MatchGroup, ...],
 ) -> dict[str, PaymentStatus]:
+    """Classify fulfillment; shared bank residual does not belong to every linked order."""
     by_order: defaultdict[str, int] = defaultdict(int)
     adjusted: defaultdict[str, int] = defaultdict(int)
     by_bank: defaultdict[str, int] = defaultdict(int)
     order_banks: defaultdict[str, set[str]] = defaultdict(set)
+    bank_owners: defaultdict[str, set[str]] = defaultdict(set)
+    for group in groups:
+        if group.link_status is LinkStatus.CONFIRMED:
+            for bank_id in group.bank_txn_ids:
+                bank_owners[bank_id].update(group.order_ids)
     for edge in allocations:
         by_order[edge.order_id] += edge.allocated_cash_minor
         by_bank[edge.bank_txn_id] += edge.allocated_cash_minor
@@ -247,7 +256,8 @@ def derive_payment_statuses(
             statuses[order.order_id] = PaymentStatus.PARTIAL
         else:
             has_excess = any(
-                bank_by_id[bank_id].eligible_credit_minor > by_bank[bank_id]
+                bank_owners[bank_id] == {order.order_id}
+                and bank_by_id[bank_id].eligible_credit_minor > by_bank[bank_id]
                 for bank_id in order_banks[order.order_id]
                 if bank_id in confirmed_bank_ids
             )

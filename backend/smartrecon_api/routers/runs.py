@@ -287,10 +287,14 @@ def export_run(
     run_id: str,
     format: Literal["xlsx"] = "xlsx",
     expected_revision: int | None = Query(default=None, ge=0),
+    revision: int | None = Query(default=None, ge=0),
     db: Session = Depends(get_db),
 ) -> FileResponse:
     run = _run_or_404(db, run_id)
-    if expected_revision is not None and expected_revision != run.current_revision:
+    selected_revision = _effective_revision(run, revision)
+    if selected_revision > run.current_revision:
+        raise HTTPException(status_code=404, detail={"error_code": "REVISION_NOT_FOUND"})
+    if expected_revision is not None and expected_revision != selected_revision:
         raise HTTPException(
             status_code=409,
             detail={
@@ -300,13 +304,15 @@ def export_run(
                 "current_revision": run.current_revision,
             },
         )
-    result = _result_or_404(run_id, run.current_revision)
+    # An explicit historical target is immutable. Keep the same target for data,
+    # audit and filename even if another review commits while the report is built.
+    result = _result_or_404(run_id, selected_revision)
     session = db.get(UploadSession, run.upload_session_id)
-    actions = review_actions_as_of(db, run_id, run.current_revision)
+    actions = review_actions_as_of(db, run_id, selected_revision)
     path = create_excel_export(
         run_id,
         result,
-        run.current_revision,
+        selected_revision,
         run_metadata={
             "status": run.status,
             "currency": run.currency,

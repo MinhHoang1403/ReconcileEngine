@@ -1,5 +1,21 @@
 # Báo cáo nghiệm thu kỹ thuật
 
+## Classification và historical revision — Checkpoint D, 2026-10-20
+
+Checkpoint C commit `b837f7753eff8388b6450f9002e44d005be9b86c` đã push và GitHub Actions [39368410681](https://github.com/MinhHoang1403/ReconcileEngine/actions/runs/39368410681) success ở cả ba jobs. D chỉ sửa payment-status derivation/đường gọi review, bổ sung optional historical export query đúng D4, oracle và QA; không đổi enum, cash allocation, matching policy hoặc schema DB.
+
+Regression N:1 hai order 100.000/200.000 và bank 350.000 fail trước sửa vì cả hai OVERPAID dù edges/residual đúng. Sửa xác định ownership từ **confirmed group participants**, không suy dư cho từng order dựa vào việc cùng dùng bank. Kết quả FULL/FULL, cash 300.000, unapplied 50.000, một bank residual exception 50.000. OVERPAID một order có ownership riêng vẫn đúng. `research/classification_evaluation.py` có 15 tình huống/19 bản ghi: baseline 17/19, candidate 19/19; confusion matrix và giới hạn ở EVALUATION_REPORT. Test riêng phủ cash/residual/adjustment/exception cùng ba chiều link/payment/review.
+
+API historical export trước đây không chọn revision: test sau approve→undo xin revision 1 đã trả 409, dù historical dashboard/groups đọc được. Đã bổ sung `revision` query tương thích ngược: không truyền vẫn giữ stale-export guard cũ; truyền tường minh ghim cùng result/audit/KPI/manifest/artifact revision. Future revision 404. Unit API regression sau undo kiểm tra workbook revision 1 chỉ có một audit action và allocation khớp dashboard revision 1, trong khi export mặc định với expected revision cũ vẫn 409. Không rewrite run/revision/result snapshots cũ.
+
+Regression cuối `uv run pytest -q`: **220 passed / 39,65 s**; chỉ hai warning Starlette/httpx và Windows ZMQ đã biết. Ruff check/format đạt (121 files). Frontend ESLint đạt, Vitest **20 passed**, TypeScript/Vite build đạt; Plotly chunk warning không đổi. Hai lần build backend Lab phục vụ kiểm chứng classification rồi thêm historical export; ba service healthy/migration exit 0, không migration mới.
+
+Bảy HTTP/PostgreSQL oracles ở `classification-http-oracles.json` đạt; run shared-residual `eae3fede-0a5a-4223-afad-fe5044a581e1` có FULL=2/OVERPAID=0 ở dashboard và orders API. Workbook `02_Orders` có đúng hai “Đã thu đủ”, đủ chín sheet, không biến 50.000 dư thành order cash.
+
+Concurrency run `6552c17f-1a57-4798-a3ce-2475d8aa03b5`: hai approve cạnh tranh trả `[200,409]`, idempotent retry đúng, revision 3/ba actions; dependency undo và stale requests đều 409, M:N không approve. Conservation đúng revisions 0–3. Historical exports cả bốn revisions mở được/chín sheet, cash khớp dashboard tương ứng và audit không lộ action tương lai; bytes lần lượt 56.956/57.125/57.193/57.359. Không dùng kết quả latest để gắn nhãn historical.
+
+Edge 1440×900 run `33dee6af-81ce-4690-a6a5-8325c1328088` đi trọn import→Health→run→dashboard→export→approve/undo→reopen, conservation true, export 56.937 bytes, không lỗi runtime/console/network. Evidence `reports/lab/browser-classification.json`. Inventories `main-after-classification.json`/`lab-after-classification.json` so với trước thí nghiệm đạt cả tám kiểm tra: DB/artifacts/sample runs/container/image chính không đổi, health OK, volume/network độc lập. Gate D được ghi nhận trên bộ oracle và workflow này; E–G còn tiếp tục, không được coi là đã nghiệm thu UX/stress/release hay cho phép cutover.
+
 ## Matching và research đối chứng — Checkpoint C, 2026-10-20
 
 Checkpoint B đã push commit `b9c21117909dbbebe9fa24cae5ba5f61639be6ea`; GitHub Actions [39366948193](https://github.com/MinhHoang1403/ReconcileEngine/actions/runs/39366948193) có cả backend, frontend và containers success. Checkpoint C tiếp trên commit đó, không đổi default auto-confirm policy và không cài Splink/OR-Tools trong runtime ứng dụng.

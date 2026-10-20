@@ -43,6 +43,7 @@ def exercise(base_url: str) -> list[dict]:
         ("unicode_token_boundary", [("DH01", day, 100000, "")], [bank("B1", 100000, "ĐDH01")], 0),
         ("amount_date_is_not_identity", [("ORDER-A", day, 100000, "")], [bank("B1", 100000, "Thanh toan")], 0),
         ("full_reference_group_control", plain, [bank("B1", 300000, "ORDER-A ORDER-B")], 300000),
+        ("shared_group_residual", plain, [bank("B1", 350000, "ORDER-A ORDER-B")], 300000),
         (
             "complex_graph_is_review_only",
             plain,
@@ -102,10 +103,22 @@ def exercise(base_url: str) -> list[dict]:
             assert dashboard["conservation"]["is_valid"]
             assert dashboard["kpis"]["confirmed_cash_allocated_minor"] == expected_cash
             assert dashboard["kpis"]["unapplied_bank_credit_minor"] == sum(row[2] for row in bank_rows) - expected_cash
+            if name == "shared_group_residual":
+                assert dashboard["payment_status_counts"]["FULL"] == 2
+                assert dashboard["payment_status_counts"]["OVERPAID"] == 0
+                order_response = client.get(f"/api/runs/{run_id}/orders")
+                order_response.raise_for_status()
+                assert {row["payment_status"] for row in order_response.json()["items"]} == {"FULL"}
             exported = client.get(f"/api/runs/{run_id}/exports?format=xlsx&expected_revision=0")
             exported.raise_for_status()
             workbook = load_workbook(BytesIO(exported.content), read_only=True, data_only=True)
             assert len(workbook.sheetnames) == 9
+            if name == "shared_group_residual":
+                order_cells = list(workbook["02_Orders"].values)
+                header_index = next(index for index, row in enumerate(order_cells) if "Trạng thái thanh toán" in row)
+                column = order_cells[header_index].index("Trạng thái thanh toán")
+                states = [row[column] for row in order_cells[header_index + 1 :] if row[0] in {"ORDER-A", "ORDER-B"}]
+                assert states == ["Đã thu đủ", "Đã thu đủ"]
             workbook.close()
             output.append(
                 {
@@ -114,6 +127,7 @@ def exercise(base_url: str) -> list[dict]:
                     "cash_minor": expected_cash,
                     "conservation": True,
                     "export_bytes": len(exported.content),
+                    "payment_status_counts": dashboard["payment_status_counts"],
                 }
             )
     return output

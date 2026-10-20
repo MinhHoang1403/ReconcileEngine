@@ -35,6 +35,8 @@ Mỗi review revision phải kiểm tra lại toàn bộ các phương trình tr
 - Bank transfer 98.000 cho nghĩa vụ 100.000 không tự sinh fee 2.000.
 - N:1 dùng nhiều edges nhưng tổng theo bank chỉ tính một lần và không vượt cash budget.
 
+Phân loại tiền dư không thay đổi các phương trình trên. Một bank/group có `U(b)>0` không chứng minh mỗi order liên quan đã trả thừa. Khi nghĩa vụ từng order đã được phân bổ đủ nhưng bank có nhiều order owners trong confirmed group, các order là `FULL`; phần dư và `OVERPAY_RESIDUAL` vẫn ở bank/group và không cộng lặp vào mỗi order. `OVERPAID` ở cấp order chỉ dùng khi có tiền dư từ bank đã xác nhận thuộc riêng order đó. Với N:1 100.000 + 200.000 và credit 350.000: edges 100.000/200.000, hai order `FULL`, unapplied 50.000 và một residual exception 50.000. Không đổi enum hoặc tạo allocation giả để biểu diễn tiền dư.
+
 Code kiểm tra ở `smartrecon.domain.invariants.check_conservation`. Tests có oracle số học trực tiếp và property cases để tránh chỉ gọi lại cùng helper rồi coi là chứng minh độc lập.
 
 Nguồn kỹ thuật: Python mô tả `decimal` cho số học thập phân chính xác và nhiều chế độ làm tròn; integer minor-unit là quyết định thiết kế của dự án để làm các identity trên kiểm chứng được. Xem `RESEARCH_REFERENCES.md`.

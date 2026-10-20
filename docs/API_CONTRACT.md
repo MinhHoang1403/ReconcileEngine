@@ -41,7 +41,7 @@ Inspection trả `suggested_mapping` tương thích nhưng không bổ sung alia
 | GET | `/api/runs/{run_id}/bank-transactions/{bank_txn_id}` | Chi tiết quan hệ và truy vết của một giao dịch thanh toán |
 | GET | `/api/runs/{run_id}/exceptions` | Exception cases, phân trang |
 | GET | `/api/runs/{run_id}/exceptions/{exception_id}` | Chi tiết các bản ghi và bằng chứng liên quan đến một exception |
-| GET | `/api/runs/{run_id}/exports?format=xlsx&expected_revision={revision}` | Workbook chín sheet; từ chối 409 nếu dashboard đã cũ |
+| GET | `/api/runs/{run_id}/exports?format=xlsx&expected_revision={revision}` | Workbook chín sheet hiện hành; từ chối 409 nếu dashboard đã cũ |
 | GET | `/api/runs/{run_id}/reviews` | Review queue theo effective revision; tìm kiếm, lọc loại quan hệ và phân trang |
 | GET | `/api/runs/{run_id}/reviews/history` | Audit approve/reject/undo đã commit, phân trang |
 | POST | `/api/runs/{run_id}/reviews/approve` | Chấp thuận proposal hợp lệ và tạo effective revision mới |
@@ -51,6 +51,8 @@ Inspection trả `suggested_mapping` tương thích nhưng không bổ sung alia
 Ba endpoint review nhận `expected_revision` và `idempotency_key` trong JSON body. Approve/reject nhận `group_id` và bắt buộc có `note` nêu bằng chứng hoặc lý do quyết định; undo nhận `action_id` và note tùy chọn. `actor_label` chỉ là nhãn audit do người dùng nhập trong demo local, không phải danh tính đã xác thực. Một retry có cùng key và cùng payload trả lại cùng `action_id` với `idempotent_replay=true`; cùng key nhưng payload khác bị từ chối.
 
 Các endpoint dashboard, danh sách và detail nhận `revision >= 0` tùy chọn; khi không truyền sẽ đọc revision hiện hành. Các endpoint danh sách nhận `page >= 1`, `1 <= page_size <= 200`; response là `{run_id, effective_revision, items, page, page_size, total}`. Frontend đọc metadata run trước, ghim mọi request dashboard/explorer/detail vào cùng revision, tải 50 bản ghi mỗi lần và luôn tách “đã tải” khỏi tổng số trên server. Dữ liệu lớn không được trả toàn bộ trong một JSON.
+
+Excel cũng nhận `revision >= 0` tùy chọn để xuất một historical snapshot: `exports?format=xlsx&revision=1&expected_revision=1`. Khi không có `revision`, hành vi cũ giữ nguyên: chọn revision hiện hành và guard stale `expected_revision` trả 409. Khi chọn historical revision tường minh, `expected_revision` phải khớp revision đã chọn, không phải revision hiện hành. Dữ liệu, audit (chỉ actions `revision_after <= revision`), KPI, manifest và tên artifact đều được ghim cùng snapshot. Revision tương lai/không tồn tại trả 404; không tạo revision hoặc thay đổi run hiện hành. Tham số bổ sung tương thích ngược, không đổi enum/path/DTO hiện có.
 
 ## Upload và an toàn
 

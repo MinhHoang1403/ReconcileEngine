@@ -9,7 +9,7 @@ Yêu cầu mới được triển khai trên nhánh `research/import-reconciliat
 | A — Lab độc lập và backup/restore | Đã có bằng chứng cách ly, restore và baseline; xem QA_REPORT |
 | B — Auto mapping, Valentine/COMA và validation | Đạt trên fixture độc lập và Lab; 192 Python/20 frontend tests, xem QA/EVALUATION_REPORT |
 | C — Matching, Splink/CP-SAT và đối chứng | Đạt trên bộ công bố/Lab; 204 Python/20 frontend tests, không tích hợp dependencies nghiên cứu vào runtime |
-| D — Classification và residual theo cấp nghiệp vụ | Chưa nghiệm thu |
+| D — Classification và residual theo cấp nghiệp vụ | Đạt oracle/residual/review và historical exports; 220 Python/20 frontend tests |
 | E — Workflow gần một nút và usability | Chưa nghiệm thu |
 | F — Đối chứng tổng hợp/regression | Chưa nghiệm thu |
 | G — Diễn tập cutover/rollback và quyết định GO/NO-GO | Chưa đủ điều kiện đề xuất |

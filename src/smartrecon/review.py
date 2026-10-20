@@ -184,6 +184,7 @@ def _rebuild(
         list(result.adjustments),
         list(candidates),
         confirmed_bank_ids,
+        groups,
     )
     groups = tuple(
         replace(

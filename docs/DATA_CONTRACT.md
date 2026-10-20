@@ -67,6 +67,8 @@ Ba trạng thái độc lập:
 
 Vì vậy strong reference có thể tạo `CONFIRMED + PARTIAL`; tìm đúng quan hệ không đồng nghĩa đã thu đủ tiền.
 
+`FULL` biểu diễn nghĩa vụ order đã được phân bổ/điều chỉnh hợp lệ đủ; vẫn có thể tồn tại tiền chưa phân bổ ở bank/group. `OVERPAID` cấp order chỉ khi bank dư có confirmed ownership riêng cho order đó. Bank được gắn với nhiều order không làm tất cả order thành `OVERPAID`; residual được báo một lần theo bank. `NO_CONFIRMED_RECEIPT` nghĩa là chưa có tiền được xác minh, không khẳng định khách chưa trả. `UNKNOWN` dùng khi còn proposal cần kiểm tra. Nguồn order không eligible vẫn nằm trong raw/canonical upload và không nằm trong effective matching input/KPI như contract hiện hành; không suy `UNKNOWN`/nợ xấu từ việc bị loại khỏi input. Không materialize thêm order hoặc thay enum/API trong đợt sửa classification này.
+
 Mỗi response phân trang của explorer mang `run_id` và `effective_revision`. Dashboard analytics được dẫn xuất từ đúng effective result: tỷ lệ xác nhận có mẫu số là toàn bộ nhóm quan hệ; độ trễ là số ngày giữa ngày đơn và ngày giao dịch cho từng allocation pair đã xác nhận; phân bố residual giữ riêng `order_outstanding` và `bank_unapplied`. Review audit là chuỗi sự kiện bất biến, còn trạng thái nhóm nằm trong snapshot revision.
 
 ## Tái lập và checksum

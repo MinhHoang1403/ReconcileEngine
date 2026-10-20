@@ -59,6 +59,8 @@ Tài liệu này phân biệt nguồn nghiên cứu, đặc tả chính thức, 
 
 ## Đánh giá
 
+- [Accuracy score](https://scikit-learn.org/stable/modules/generated/sklearn.metrics.accuracy_score.html) và [confusion matrix](https://scikit-learn.org/stable/modules/generated/sklearn.metrics.confusion_matrix.html) là nguồn định nghĩa tỷ lệ nhãn đúng và ma trận expected/observed. Research classification runner tự đếm bằng integer/Counter, không thêm scikit-learn vào runtime. Tổng nghĩa vụ của những order bị phân loại sai là chỉ số tác động nội bộ, **không phải tiền bị mất hoặc sai số allocation**. Oracle giữ case/labels khai báo riêng và không đưa nhãn vào matcher.
+
 - [scikit-learn `precision_recall_fscore_support`](https://scikit-learn.org/stable/modules/generated/sklearn.metrics.precision_recall_fscore_support.html) được dùng làm nguồn định nghĩa Precision, Recall và F-score. SmartRecon tự tính các tỷ lệ trên tập predicted/truth edges để không thêm runtime dependency; trường hợp mẫu số 0 được công bố là N/A thay vì che bằng giá trị mặc định.
 - Group exact match so cả tập order IDs và bank IDs; amount error đo riêng. Threshold/coverage/throughput chỉ được báo sau khi thực chạy, kèm data hash, seed, policy, rule version và phần cứng. SmartRecon chưa tuyên bố độ chính xác trên sao kê thật.
 - [Jupyter Notebook format](https://nbformat.readthedocs.io/en/latest/) và [nbclient](https://nbclient.readthedocs.io/en/latest/) là tài liệu chính thức cho notebook artifact và thực thi kernel sạch trong kiểm thử.

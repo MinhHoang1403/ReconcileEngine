@@ -219,6 +219,22 @@ def run(base_url: str) -> dict[str, Any]:
     assert stale_status == 409 and stale["detail"]["error_code"] == "STALE_REVISION"
 
     dashboards = [_assert_revision_invariants(client, run_id, revision) for revision in range(4)]
+    historical_exports = []
+    for revision, dashboard in enumerate(dashboards):
+        status, content, _ = client.request(
+            "GET", f"/api/runs/{run_id}/exports?format=xlsx&revision={revision}&expected_revision={revision}"
+        )
+        assert status == 200 and isinstance(content, bytes)
+        _assert_excel_matches_dashboard(content, dashboard)
+        workbook = load_workbook(BytesIO(content), read_only=True, data_only=True)
+        audit = workbook["08_ReviewAudit"]
+        assert audit.max_row == revision + 1  # revision 0 contains only the audit header
+        if revision:
+            headers = next(audit.values)
+            after_index = headers.index("Revision sau")
+            assert all(row[after_index] <= revision for row in list(audit.values)[1:])
+        workbook.close()
+        historical_exports.append({"revision": revision, "bytes": len(content)})
     history = client.json("GET", f"/api/runs/{run_id}/reviews/history?page_size=200")
     assert history["total"] == 3
     assert {item["action_type"] for item in history["items"]} == {
@@ -252,6 +268,7 @@ def run(base_url: str) -> dict[str, Any]:
         "rollback_error": rollback["detail"]["error_code"],
         "undo_dependency_error": dependency["detail"]["error_code"],
         "stale_error": stale["detail"]["error_code"],
+        "historical_exports": historical_exports,
     }
 
 

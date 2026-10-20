@@ -189,6 +189,35 @@ uv run python scripts/qa_matching.py --output reports/lab/matching-http-oracles.
 
 `qa_matching.py` chỉ cho mutation tại loopback Lab port 8002, từ chối URL chính trước request. Các thí nghiệm vẫn chưa thay thế kiểm định classification, stress test, UX, restart/concurrency tổng hợp và diễn tập release ở các checkpoint sau.
 
+## Classification và residual ownership trong Lab — 2026-10-20
+
+Đáp án độc lập trong `research/classification_evaluation.py`: 15 tình huống, 19 bản ghi cần kiểm tra, case hash `a82203b936482b52775e96523cb3705197f9f3d93a42c7c5cac45abb4fde737c`. Bao phủ full/partial/overpaid riêng một order/residual bank dùng chung/no receipt/unknown/ineligible/duplicate/collision/PSP fee/search budget và approve/reject/undone. Ineligible được kiểm tra là **bị loại khỏi effective input**, giữ contract cũ; không báo sai rằng API đã materialize trạng thái `NOT_ELIGIBLE` cho order không có trong result.
+
+Baseline source `4dfd62e` và candidate cùng dữ liệu/expected labels:
+
+| Expected → observed | Baseline | Candidate |
+|---|---:|---:|
+| FULL → FULL | 4 | 6 |
+| FULL → OVERPAID (sai) | 2 | 0 |
+| PARTIAL → PARTIAL | 2 | 2 |
+| OVERPAID → OVERPAID | 1 | 1 |
+| NO_CONFIRMED_RECEIPT → cùng nhãn | 5 | 5 |
+| UNKNOWN → UNKNOWN | 4 | 4 |
+| Ineligible → bị loại đúng | 1 | 1 |
+
+Accuracy 17/19 (89,47%) → 19/19 (100%) chỉ trên bộ synthetic nhỏ này. Tổng nghĩa vụ của hai order bị phân loại sai 300.000 → 0 VND; **không phải tiền allocation sai/mất**. Trước sửa, ca N:1 100.000 + 200.000 nhận 350.000 đã phân bổ đúng 100.000/200.000 và giữ 50.000 nhưng gán OVERPAID cho cả hai. Sau sửa là FULL/FULL, 50.000 vẫn bank unapplied và một `OVERPAY_RESIDUAL` 50.000, không tự quy thuộc vào từng order. Trường hợp một order có confirmed ownership riêng với credit 120.000 cho nghĩa vụ 100.000 vẫn OVERPAID/20.000 unapplied. Pure review rebuild dùng cùng helper và confirmed group ownership, không copy logic sang backend/frontend.
+
+Oracle revision thuần tách payment/link/review: approve → FULL/CONFIRMED/APPROVED, reject → NO_CONFIRMED_RECEIPT/REJECTED/REJECTED, restored snapshot undo → UNKNOWN/PROPOSED/UNDONE. Test HTTP/PostgreSQL kiểm tra transaction/audit/idempotency/concurrency độc lập, không coi pure snapshot rewind là bằng chứng đã thử DB undo.
+
+```powershell
+uv run python research/classification_evaluation.py --output reports/lab/classification-candidate.json
+uv run pytest tests/audit/test_payment_classification.py tests/api/test_reviews.py -q
+uv run python scripts/qa_matching.py --output reports/lab/classification-http-oracles.json
+uv run python scripts/qa_concurrency.py --url http://127.0.0.1:8002 --output reports/lab/classification-concurrency.json
+```
+
+Baseline được chạy bằng cùng runner, đặt `C:/Work/ReconcileEngine/src` trước editable source trong `sys.path`; JSON ghi path/hash/commit implementation để kiểm chứng nguồn. Nhãn chỉ dùng trong evaluator sau khi engine chạy. Không thay enum/allocation/matching policy để đạt accuracy; không sửa lại snapshot lịch sử đã lưu.
+
 ## Tái lập
 
 Notebook chính là `notebooks/reconciliation_research.ipynb`. Kiểm thử dùng kernel sạch, working directory tương đối và chạy mọi cell bằng `nbclient`; notebook đã được thực thi và lưu output thực. Dependency được khóa trong `uv.lock`. Script evaluation ghi manifest, seed, dataset hashes, policy snapshot, phần cứng và commit hiện hành vào JSON output. Runtime artifact nằm trong `reports/` và bị Git ignore để tránh commit dữ liệu chạy tùy máy; bảng kết quả kiểm chứng được version hóa trong tài liệu này.

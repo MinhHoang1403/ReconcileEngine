@@ -59,8 +59,14 @@ class ReviewSession:
         return None
 
     def scalars(self, statement: object):
+        params = statement.compile().params
+        maximum_revision = next((value for key, value in params.items() if key.startswith("revision_after")), None)
         actions = sorted(
-            self.committed_actions.values(),
+            (
+                action
+                for action in self.committed_actions.values()
+                if maximum_revision is None or action.revision_after <= maximum_revision
+            ),
             key=lambda item: item.revision_after,
             reverse=True,
         )
@@ -271,6 +277,10 @@ def test_undo_creates_a_new_revision_and_restores_the_prior_snapshot(
             historical_dashboard = client.get(f"/api/runs/{session.run.id}/dashboard?revision=1")
             historical_groups = client.get(f"/api/runs/{session.run.id}/groups?revision=1&page_size=200")
             stale_export = client.get(f"/api/runs/{session.run.id}/exports?format=xlsx&expected_revision=1")
+            historical_export = client.get(
+                f"/api/runs/{session.run.id}/exports?format=xlsx&revision=1&expected_revision=1"
+            )
+            future_export = client.get(f"/api/runs/{session.run.id}/exports?format=xlsx&revision=99")
     finally:
         app.dependency_overrides.clear()
 
@@ -313,6 +323,17 @@ def test_undo_creates_a_new_revision_and_restores_the_prior_snapshot(
     assert historical_target["review_status"] == "APPROVED"
     assert stale_export.status_code == 409
     assert stale_export.json()["detail"]["error_code"] == "STALE_REVISION"
+    assert historical_export.status_code == 200
+    assert future_export.status_code == 404
+    historical_workbook = load_workbook(BytesIO(historical_export.content), read_only=True)
+    assert historical_workbook["08_ReviewAudit"].max_row == 2
+    historical_allocations = list(historical_workbook["05_AllocationEdges"].values)
+    historical_amount = historical_allocations[0].index("Số tiền phân bổ")
+    assert (
+        sum(row[historical_amount] for row in historical_allocations[1:])
+        == (dashboard_after_approval.json()["kpis"]["confirmed_cash_allocated_minor"])
+    )
+    historical_workbook.close()
     assert restored.allocations == base_result.allocations
     assert restored.kpis == base_result.kpis
     assert restored.conservation == base_result.conservation
