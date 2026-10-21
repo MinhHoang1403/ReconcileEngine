@@ -29,17 +29,18 @@ class UploadSession(Base):
     source_manifest: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
     mapping_snapshot: Mapped[dict[str, Any] | None] = mapped_column(JSON)
     health_snapshot: Mapped[dict[str, Any] | None] = mapped_column(JSON)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class ImportProfile(Base):
     """User-confirmed import configuration bound to one exact two-feed schema."""
 
     __tablename__ = "import_profiles"
+    __table_args__ = (UniqueConstraint("schema_fingerprint"),)
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     name: Mapped[str] = mapped_column(String(160), nullable=False)
-    schema_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False, unique=True, index=True)
+    schema_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     schema_version: Mapped[str] = mapped_column(String(64), nullable=False)
     schema_snapshot: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
     mapping_snapshot: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
@@ -62,7 +63,7 @@ class ReconciliationRun(Base):
     mapping_snapshot: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
     semantic_checksum: Mapped[str | None] = mapped_column(String(64), index=True)
     current_revision: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), server_default=func.now())
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
@@ -80,7 +81,7 @@ class RunRevision(Base):
     effective_checksum: Mapped[str] = mapped_column(String(64), nullable=False)
     result_artifact_path: Mapped[str | None] = mapped_column(String(500))
     summary: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class ReviewAction(Base):
@@ -101,7 +102,7 @@ class ReviewAction(Base):
     undo_of_action_id: Mapped[str | None] = mapped_column(String(36))
     note: Mapped[str | None] = mapped_column(Text)
     payload: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class MatchGroupRecord(Base):
@@ -167,4 +168,4 @@ class ArtifactManifest(Base):
     relative_path: Mapped[str] = mapped_column(String(500), nullable=False)
     sha256: Mapped[str] = mapped_column(String(64), nullable=False)
     byte_size: Mapped[int] = mapped_column(BigInteger, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), server_default=func.now())

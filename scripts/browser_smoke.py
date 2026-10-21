@@ -14,6 +14,7 @@ import time
 import urllib.request
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 from websockets.sync.client import connect
 
@@ -123,13 +124,16 @@ def capture(devtools: DevTools, path: Path | None) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--url", default="http://localhost:5173")
+    parser.add_argument("--url", default="http://localhost:5174")
     parser.add_argument("--width", type=int, default=1440)
     parser.add_argument("--height", type=int, default=900)
     parser.add_argument("--screenshot-dir", type=Path)
     parser.add_argument("--all-stages", action="store_true")
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
+    address = urlsplit(args.url)
+    if address.scheme != "http" or address.hostname not in {"localhost", "127.0.0.1"} or address.port != 5174:
+        raise ValueError("Mutation QA is restricted to loopback Lab website port 5174")
 
     port = free_port()
     profile = Path(tempfile.mkdtemp(prefix="smartrecon-browser-"))

@@ -6,6 +6,8 @@ Inspection trả `suggested_mapping` tương thích nhưng không bổ sung alia
 
 ## Luồng chuẩn
 
+Excel của một revision hợp lệ được tái sử dụng nguyên bytes sau khi đối chiếu SHA-256/byte size với manifest. Tạo hoặc phục hồi export dùng row lock của run để tránh hai request cùng ghi file/manifest. Nếu artifact dẫn xuất thiếu hoặc checksum sai, dựng lại từ đúng result/audit của revision được chọn và cập nhật manifest trong transaction; không thay raw/result/review snapshots. Kiểm tra stale/future revision vẫn xảy ra trước cache lookup. GET export có thể ghi artifact/manifest khi cần tạo hoặc phục hồi, vì vậy không được coi là endpoint read-only trong audit môi trường chính.
+
 Inspection có thêm hai trường tương thích ngược: `automatic_mapping` là MappingConfig đầy đủ hoặc `null`; `automation_reasons` là danh sách mã cần xác nhận (structure/source/mapping/currency/money/date). Không có nghĩa đã chuẩn hóa hoặc đã tạo run. Client chỉ được tự gọi mapping/Health khi server cung cấp cấu hình này; vẫn phải đi qua chuẩn hóa toàn bộ dòng và Health Gate. Không suy separator từ `1.000`, không mặc định currency để bỏ câu hỏi, không tự acknowledge/exclude hoặc gửi `/api/runs`. Thiếu hai trường mới thì giữ luồng xác nhận thủ công.
 
 1. `POST /api/demo/datasets` hoặc `POST /api/uploads/inspect` để tạo upload session bất biến và nhận raw EDA/mapping gợi ý.

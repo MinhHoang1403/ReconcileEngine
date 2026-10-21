@@ -2,6 +2,31 @@
 
 ## Phạm vi và giao thức
 
+### Đối chứng tổng hợp — Checkpoint F, 2026-10-20
+
+Baseline core `4dfd62e3bf8289477e291463f5afa4b41c0505d4`, candidate matching/resolver đã commit D/E; F không chỉnh matching/policy. `research/matching_evaluation.py --extended` chạy cùng CSV bytes/policy/seed, warmup + năm lần đo cho demo, hard 1.000, holdout mới và stress 3.000. Source file hashes/commit/dirty flag, môi trường, từng thời gian và tuple allocation được lưu trong `reports/lab/comprehensive-{baseline,candidate}.json`. Trên host Windows 11 26300/AMD64 Family 25 Model 68, Python 3.12.14, Pandas 2.3.3, RapidFuzz 3.14.6, DuckDB 1.5.6. Không đưa truth vào normalizer/engine.
+
+| Bộ dữ liệu | Edge F1 trước → sau | False auto trong phạm vi evaluator trước → sau | Candidate recall sau | Allocation absolute error sau (VND) |
+|---|---:|---:|---:|---:|
+| Demo 100/98 | 0,962963 → 0,962963 | 0 → 0 | 100% | 1.000.000 |
+| Hard 1.000/998 | 0,996481 → 0,996481 | 0 → 0 | 100% | 1.000.000 |
+| Holdout gộp/chia 270/260 | 0,740741 → 0,754717 | 10 → 0 | 100% | 68.391.146 |
+| Stress 3.000/2.998 | 0,998831 → 0,998831 | 0 → 0 | 100% | 1.000.000 |
+
+Demo/hard/stress có từng tuple allocation giống baseline; conservation true và semantic checksum ổn định trong mỗi implementation qua năm lần lặp. Holdout bổ sung trong `research/financial_cases.py` không import matching code, sinh 180 cases/330 truth edges bằng seed 20261020, gồm 40 cases mỗi 1:1/N:1/1:N/M:N, 10 collision và 10 Unicode false-reference không có truth edge. Hash semantic orders `041988b6…f5a7a1`, banks `06c2bb0e…efccc0`, truth `b2d4c47d…bf352` khớp hai lần đối chứng. Cases được tạo sau khi policy/thuật toán đã chọn; không dùng kết quả để tune. Các họ lỗi adversarial đã biết từ C, không tuyên bố đây là phân phối nghiệp vụ thực hoặc khái niệm lỗi chưa từng biết.
+
+Evaluator phân vùng theo participants có truth edge để hỗ trợ development/holdout; vì vậy zero-edge Unicode cases không vào mẫu số false-auto mặc định. Bổ sung kiểm tra **toàn bộ allocated edge keys trừ toàn bộ truth keys** trên holdout đầy đủ, kể cả hai bên orphan: **20 → 0 cạnh phân bổ sai**, không che 10 Unicode false matches. Trước/sau error trên hợp truth/predicted theo evaluator 73.167.445 → 68.391.146 VND; phần lớn error còn lại là M:N/collision **chưa xác nhận**, không phải tiền biến mất. Không đổi quy tắc an toàn để tăng recall.
+
+Holdout sau sửa: 1:1 có precision 100%, confirmed recall 80% (10 collision chưa xác nhận), candidate recall 100%; N:1 và 1:N precision/recall/candidate recall 100%; M:N confirmed recall 0% đúng phạm vi review-only, candidate recall 100%, candidate precision 35,93%. Group precision 92,31%→100%, group recall giữ 120/170=70,59%. Không dùng F1 tổng để che M:N chưa tự xử lý hoặc candidate burden tăng.
+
+Median giây trước/sau demo 0,117/0,090; hard 3,409/3,671; holdout 0,924/1,048; stress 25,195/16,990. Peak **Python tracemalloc**, không native RSS, trước/sau lần lượt 703.461/732.493; 7.773.952/7.789.364; 2.547.038/2.739.466; 21.824.348/21.873.560 bytes. Baseline có một phần công việc Docker/QA khác chạy trên host; **không suy cải thiện tốc độ từ các chênh lệch này**. Stress chủ yếu là deterministic 1:1 fillers, được bổ sung holdout nhiều group để không gọi 3.000 đơn dễ là bằng chứng chất lượng grouping. Lần yêu cầu sinh 10.000 bị generator từ chối (contract 1.000–3.000); không thay generator để vượt giới hạn và không tuyên bố đã stress 10.000.
+
+Mapping đối chứng lại 24 schemas: baseline 34 đúng/7 sai/1 thiếu, precision 82,93%, recall 97,14%, coverage 82%; candidate 35 đúng/0 sai/0 thiếu, precision/recall 100%, coverage 70%. Abstention làm giảm coverage nhưng loại mapping sai. Manual-decision proxy 16→15. Classification cùng case hash D: 17/19→19/19, amount-weighted misclassification 300.000→0, confusion matrix chi tiết ở phần D. Hai số đo không có nghĩa hiệu quả trên toàn bộ dữ liệu ngoài mẫu.
+
+Dữ liệu được chủ dự án chỉ định ở workspace chính có 100/98, không phải 380/362; CSV logical rows của cả bốn file business/truth khớp Lab dù hash vật lý khác line endings. `a_website_first` có OMS 606, bank 279, Shopee 133, TikTok 81 và manifest tự khai Olist-derived/simulated, không phải sao kê tài chính thật. `research/external_import_evaluation.py` đọc từng cặp receivables + bank, không ghép thành nhiều feed. Cả ba đều đòi xác nhận nguồn/cột; không tự coi credit/fee/net là cùng nghĩa, không aggregate settlement. Ground truth ngoài này có scenario/outcome nhưng không có allocated cash edges, vì vậy **không có matching Precision/Recall/allocation benchmark hợp lệ** cho bộ đó. Chỉ báo schema/abstention/hash; không copy raw files hoặc nhãn vào runtime/repository.
+
+Quyết định giữ runtime hiện tại với các guard B/C/D/E và sửa tính toàn vẹn Excel. Valentine/Splink/CP-SAT vẫn chỉ ở môi trường research: không đủ lợi ích vận hành để tích hợp; Pandera không thêm runtime; Sato chỉ ý tưởng, không ML/LLM. Không điều chỉnh threshold hoặc kiến trúc.
+
 ### Workflow nhập liệu — Checkpoint E, 2026-10-20
 
 Giả thuyết: bỏ bước xác nhận lại cột đã có đủ chứng cứ sẽ giảm thao tác bắt buộc, không giảm guard tiền/ngày/nguồn. Baseline B browser demo cần hai nút từ source đến Health, không chọn trường/advanced. E cần một nút, không chọn trường/advanced ở desktop/laptop/mobile; vẫn nút **Chạy đối soát** riêng, cảnh báo không tự ghi nhận. Đây là giảm một thao tác bắt buộc theo cùng kịch bản, không phải chứng minh human task time.

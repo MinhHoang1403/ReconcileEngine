@@ -11,10 +11,10 @@ Yêu cầu mới được triển khai trên nhánh `research/import-reconciliat
 | C — Matching, Splink/CP-SAT và đối chứng | Đạt trên bộ công bố/Lab; 204 Python/20 frontend tests, không tích hợp dependencies nghiên cứu vào runtime |
 | D — Classification và residual theo cấp nghiệp vụ | Đạt oracle/residual/review và historical exports; 220 Python/20 frontend tests |
 | E — Workflow gần một nút và usability | Đạt phạm vi tự động theo phê duyệt: 15/15 file workflows/ba viewport, expert path và demo E2E; chưa kiểm chứng người dùng thật |
-| F — Đối chứng tổng hợp/regression | Chưa nghiệm thu |
+| F — Đối chứng tổng hợp/regression | Đạt: 240 Python/23 frontend, đối chứng holdout/stress, checksum/concurrency, restart/restore; ORM khớp schema, không migration mới |
 | G — Diễn tập cutover/rollback và quyết định GO/NO-GO | Chưa đủ điều kiện đề xuất |
 
-Hệ thống chính giữ nguyên source/branch, container/image IDs, DB table hashes, artifact fingerprint và các sample run/KPI. Lab ở 5174/8002 với storage/network riêng; cổng 8001 thuộc project khác. Dữ liệu dùng cho backup/drill là synthetic. Script từ chối tự dừng writer của project chính; cutover và maintenance chính vẫn cần phê duyệt riêng. Không push `main`.
+Hệ thống chính giữ nguyên source/branch và container/image IDs. Trong E chủ dự án có thêm một run (đã xác nhận); đối chiếu scoped cho thấy DB/artifacts/sample runs có trước phiên đó không đổi. Từ mốc mới `main-before-regression.json`, tiếp tục so toàn bộ trạng thái mà không bỏ qua phát sinh ngoài dự kiến. Lab ở 5174/8002 với storage/network riêng; cổng 8001 thuộc project khác. Dữ liệu dùng cho backup/drill là synthetic. Script từ chối tự dừng writer của project chính; cutover và maintenance chính vẫn cần phê duyệt riêng. Không push `main`.
 
 Nguồn bằng chứng thực thi nằm trong `reports/lab/` và `reports/backups/lab-consistent-20261020/` ở worktree nghiên cứu; chúng bị Git ignore. Chi tiết lệnh, kết quả, sự cố image tag đã tái hiện và cách sửa nằm tại `QA_REPORT.md`/`DEPLOYMENT.md`.
 

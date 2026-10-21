@@ -13,6 +13,7 @@ from itertools import combinations
 from pathlib import Path
 from threading import Barrier
 from typing import Any
+from urllib.parse import urlsplit
 
 from openpyxl import load_workbook
 
@@ -136,6 +137,9 @@ def _assert_excel_matches_dashboard(workbook_bytes: bytes, dashboard: dict[str, 
 
 
 def run(base_url: str) -> dict[str, Any]:
+    address = urlsplit(base_url)
+    if address.scheme != "http" or address.hostname not in {"localhost", "127.0.0.1"} or address.port != 8002:
+        raise ValueError("Mutation QA is restricted to loopback Lab API port 8002")
     client = ApiClient(base_url)
     run_id = _new_demo_run(client)
     queue = client.json("GET", f"/api/runs/{run_id}/reviews?page_size=200")
@@ -274,7 +278,7 @@ def run(base_url: str) -> dict[str, Any]:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--url", default="http://127.0.0.1:8000")
+    parser.add_argument("--url", default="http://127.0.0.1:8002")
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
     result = run(args.url)

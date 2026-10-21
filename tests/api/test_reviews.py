@@ -77,7 +77,7 @@ class ReviewSession:
 
         return Rows()
 
-    def get(self, model: type, identifier: str):
+    def get(self, model: type, identifier: str, **kwargs):
         if model is ReviewAction:
             return self.committed_actions.get(identifier)
         if model is ReconciliationRun and identifier == self.run.id:

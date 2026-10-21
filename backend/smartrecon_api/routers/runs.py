@@ -23,14 +23,18 @@ from backend.smartrecon_api.services.analytics import (
 )
 from backend.smartrecon_api.services.artifacts import relative_artifact_path, sha256_path
 from backend.smartrecon_api.services.details import entity_detail, extend_group_detail
-from backend.smartrecon_api.services.exports import create_excel_export
+from backend.smartrecon_api.services.exports import create_excel_export, excel_export_path
 from backend.smartrecon_api.services.runs import execute_run, load_run_result, paginate
 
 router = APIRouter(prefix="/api/runs", tags=["runs"])
 
 
-def _run_or_404(db: Session, run_id: str) -> ReconciliationRun:
-    run = db.get(ReconciliationRun, run_id)
+def _run_or_404(db: Session, run_id: str, *, lock: bool = False) -> ReconciliationRun:
+    run = (
+        db.get(ReconciliationRun, run_id, with_for_update=True, populate_existing=True)
+        if lock
+        else db.get(ReconciliationRun, run_id)
+    )
     if run is None:
         raise HTTPException(
             status_code=404,
@@ -290,7 +294,8 @@ def export_run(
     revision: int | None = Query(default=None, ge=0),
     db: Session = Depends(get_db),
 ) -> FileResponse:
-    run = _run_or_404(db, run_id)
+    # Serialize first creation/repair against other exports and review of this run.
+    run = _run_or_404(db, run_id, lock=True)
     selected_revision = _effective_revision(run, revision)
     if selected_revision > run.current_revision:
         raise HTTPException(status_code=404, detail={"error_code": "REVISION_NOT_FOUND"})
@@ -307,6 +312,27 @@ def export_run(
     # An explicit historical target is immutable. Keep the same target for data,
     # audit and filename even if another review commits while the report is built.
     result = _result_or_404(run_id, selected_revision)
+    path = excel_export_path(run_id, selected_revision)
+    existing = db.scalar(
+        select(ArtifactManifest).where(
+            ArtifactManifest.run_id == run_id,
+            ArtifactManifest.artifact_type == "XLSX_EXPORT",
+            ArtifactManifest.relative_path == relative_artifact_path(path),
+        )
+    )
+    if (
+        existing is not None
+        and path.is_file()
+        and path.stat().st_size == existing.byte_size
+        and sha256_path(path) == existing.sha256
+    ):
+        # Never rewrite a valid download with a different generation timestamp.
+        db.commit()
+        return FileResponse(
+            path,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            filename=f"smartrecon-{run_id}.xlsx",
+        )
     session = db.get(UploadSession, run.upload_session_id)
     actions = review_actions_as_of(db, run_id, selected_revision)
     path = create_excel_export(
@@ -324,13 +350,6 @@ def export_run(
         source_manifest=session.source_manifest if session else {},
         review_audit=review_audit_rows(actions),
     )
-    existing = db.scalar(
-        select(ArtifactManifest).where(
-            ArtifactManifest.run_id == run_id,
-            ArtifactManifest.artifact_type == "XLSX_EXPORT",
-            ArtifactManifest.relative_path == relative_artifact_path(path),
-        )
-    )
     if existing is None:
         db.add(
             ArtifactManifest(
@@ -341,7 +360,11 @@ def export_run(
                 byte_size=path.stat().st_size,
             )
         )
-        db.commit()
+    else:
+        # Recover derived reports from the pinned result, not from current/latest state.
+        existing.sha256 = sha256_path(path)
+        existing.byte_size = path.stat().st_size
+    db.commit()
     return FileResponse(
         path,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

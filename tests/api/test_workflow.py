@@ -8,7 +8,7 @@ from openpyxl import Workbook, load_workbook
 
 from backend.smartrecon_api.config import get_settings
 from backend.smartrecon_api.db.database import get_db
-from backend.smartrecon_api.db.models import ReconciliationRun, UploadSession
+from backend.smartrecon_api.db.models import ArtifactManifest, ReconciliationRun, UploadSession
 from backend.smartrecon_api.main import app
 
 
@@ -17,13 +17,16 @@ class MemorySession:
 
     def __init__(self) -> None:
         self.objects: dict[tuple[type, str], object] = {}
+        self.artifacts: list[ArtifactManifest] = []
 
     def add(self, value: object) -> None:
+        if isinstance(value, ArtifactManifest):
+            self.artifacts.append(value)
         identifier = getattr(value, "id", None)
         if isinstance(identifier, str):
             self.objects[(type(value), identifier)] = value
 
-    def get(self, model: type, identifier: str):
+    def get(self, model: type, identifier: str, **kwargs):
         return self.objects.get((model, identifier))
 
     def flush(self) -> None:
@@ -36,6 +39,16 @@ class MemorySession:
         return None
 
     def scalar(self, statement: object):
+        if statement.column_descriptions[0].get("entity") is ArtifactManifest:
+            params = statement.compile().params
+            return next(
+                (
+                    item
+                    for item in self.artifacts
+                    if all(getattr(item, key.rsplit("_", 1)[0]) == value for key, value in params.items())
+                ),
+                None,
+            )
         return None
 
     def scalars(self, statement: object):
@@ -364,6 +377,55 @@ def test_demo_to_export_uses_one_persisted_run(tmp_path: Path, monkeypatch) -> N
             assert exported.status_code == 200
             export_path = tmp_path / "reconciliation.xlsx"
             export_path.write_bytes(exported.content)
+
+            # A repeated download must not silently rewrite an already checksummed artifact.
+            from backend.smartrecon_api.routers import runs as runs_router
+            from backend.smartrecon_api.services.artifacts import resolve_artifact_path, sha256_path
+
+            manifest = next(
+                item for item in session.artifacts if item.run_id == run_id and item.artifact_type == "XLSX_EXPORT"
+            )
+            stored_path = resolve_artifact_path(manifest.relative_path)
+            original_exporter = runs_router.create_excel_export
+            regenerated = []
+
+            def marked_export(*args, **kwargs):
+                regenerated.append(True)
+                path = original_exporter(*args, **kwargs)
+                path.write_bytes(path.read_bytes() + b"regenerated")
+                return path
+
+            monkeypatch.setattr(runs_router, "create_excel_export", marked_export)
+            again = client.get(f"/api/runs/{run_id}/exports?format=xlsx")
+            assert again.status_code == 200
+            assert manifest.sha256 == sha256_path(stored_path)
+            assert manifest.byte_size == stored_path.stat().st_size
+            assert again.content == exported.content
+            assert regenerated == []
+            stored_path.write_bytes(b"interrupted derived export")
+            repaired = client.get(f"/api/runs/{run_id}/exports?format=xlsx")
+            assert repaired.status_code == 200
+            assert len(regenerated) == 1
+            assert manifest.sha256 == sha256_path(stored_path)
+            assert manifest.byte_size == len(repaired.content)
+            stored_path.unlink()
+            recovered = client.get(f"/api/runs/{run_id}/exports?format=xlsx")
+            assert recovered.status_code == 200
+            assert len(regenerated) == 2
+            assert manifest.sha256 == sha256_path(stored_path)
+            assert (
+                len(
+                    [
+                        item
+                        for item in session.artifacts
+                        if item.run_id == run_id and item.artifact_type == "XLSX_EXPORT"
+                    ]
+                )
+                == 1
+            )
+            workbook = load_workbook(BytesIO(recovered.content), read_only=True)
+            assert len(workbook.sheetnames) == 9
+            workbook.close()
     finally:
         app.dependency_overrides.clear()
 

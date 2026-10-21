@@ -518,6 +518,11 @@ def _write_table_sheet(
         )
 
 
+def excel_export_path(run_id: str, revision: int) -> Path:
+    """One report artifact per immutable effective revision."""
+    return run_directory(run_id) / "exports" / f"reconciliation-r{revision}.xlsx"
+
+
 def create_excel_export(
     run_id: str,
     result: dict[str, Any],
@@ -528,7 +533,7 @@ def create_excel_export(
     review_audit: list[dict[str, Any]] | None = None,
 ) -> Path:
     """Generate a readable run-scoped workbook without formula-based business logic."""
-    output = run_directory(run_id) / "exports" / f"reconciliation-r{revision}.xlsx"
+    output = excel_export_path(run_id, revision)
     output.parent.mkdir(parents=True, exist_ok=True)
     run_metadata = run_metadata or {}
     source_manifest = source_manifest or {}

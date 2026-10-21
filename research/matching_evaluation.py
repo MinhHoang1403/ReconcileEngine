@@ -19,7 +19,7 @@ from itertools import product
 from pathlib import Path
 
 
-def evaluate(directory: Path, repeats: int) -> dict:
+def evaluate(directory: Path, repeats: int, *, extended: bool = False) -> dict:
     from smartrecon.config import ReconciliationPolicy
     from smartrecon.domain.statuses import Currency
     from smartrecon.engine import run_reconciliation
@@ -93,11 +93,40 @@ def evaluate(directory: Path, repeats: int) -> dict:
         write_demo_bundle(hard, hard_path)
         hard_result = measure(dataset(hard_path), load_ground_truth(hard_path))
         hard_result["dataset_hashes"] = hard.manifest["semantic_hashes"]
+    extended_results = {}
+    if extended:
+        from research.financial_cases import write_holdout
+
+        with tempfile.TemporaryDirectory(prefix="smartrecon-independent-holdout-") as temporary:
+            path = Path(temporary)
+            manifest = write_holdout(path)
+            labels = load_ground_truth(path)
+            bundle = dataset(path)
+            measured = measure(bundle, labels)
+            predicted = run_reconciliation(bundle, default)
+            truth_keys = {(edge.order_id, edge.bank_txn_id) for edge in labels.edges}
+            measured["global_false_allocated_edges"] = sorted(
+                (edge.order_id, edge.bank_txn_id)
+                for edge in predicted.allocations
+                if (edge.order_id, edge.bank_txn_id) not in truth_keys
+            )
+            measured["manifest"] = manifest
+            extended_results["independent_grouped_holdout"] = measured
+        print("Independent grouped holdout complete", flush=True)
+        with tempfile.TemporaryDirectory(prefix="smartrecon-stress-") as temporary:
+            path = Path(temporary)
+            stress = generate_vnd_demo(seed=20261020, order_count=3000, profile="evaluation_hard")
+            write_demo_bundle(stress, path)
+            measured = measure(dataset(path), load_ground_truth(path))
+            measured["manifest"] = stress.manifest
+            extended_results["stress"] = measured
+        print("3,000-order repeated stress complete (generator's supported maximum)", flush=True)
     core_path = Path(inspect.getfile(run_reconciliation)).resolve().parents[1]
     source_root = core_path.parent
     matching = core_path / "smartrecon" / "matching"
     return {
         "seed": 20261016,
+        "extended_datasets": extended_results,
         "repeats": repeats,
         "policy": asdict(default),
         "policy_changed": False,
@@ -134,6 +163,7 @@ def main() -> None:
     parser.add_argument("--dataset", type=Path, required=True)
     parser.add_argument("--core-source", type=Path)
     parser.add_argument("--repeats", type=int, default=5)
+    parser.add_argument("--extended", action="store_true")
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     if args.repeats < 1:
@@ -143,7 +173,7 @@ def main() -> None:
         if not (source / "smartrecon" / "engine.py").is_file():
             parser.error("core-source must contain smartrecon/engine.py")
         sys.path.insert(0, str(source))
-    result = evaluate(args.dataset.resolve(), args.repeats)
+    result = evaluate(args.dataset.resolve(), args.repeats, extended=args.extended)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(result, indent=2, default=str) + "\n", encoding="utf-8")
     print(

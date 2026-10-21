@@ -2,6 +2,10 @@
 
 Tài liệu này phân biệt nguồn nghiên cứu, đặc tả chính thức, quyết định nghiệp vụ và heuristic nội bộ. Không có benchmark hoặc độ chính xác nào được suy ra chỉ từ các nguồn dưới đây.
 
+## Tính nhất quán báo cáo dẫn xuất
+
+- [SQLAlchemy Session.get — with_for_update/populate_existing](https://docs.sqlalchemy.org/en/21/orm/session_api.html#sqlalchemy.orm.Session.get) và [PostgreSQL 17 row-level locks](https://www.postgresql.org/docs/17/explicit-locking.html#LOCKING-ROWS): row lock được giữ đến hết transaction và chỉ tuần tự hóa các thao tác cùng run. F dùng cùng cơ chế DB hiện hữu cho tạo/khôi phục Excel, không thêm distributed lock/cache service. Bản workbook đúng checksum được trả nguyên bytes; file thiếu/hỏng được dựng lại từ revision ghim và ghi manifest đúng SHA/size. Test sáu download đầu đồng thời trên PostgreSQL, unit cache hit/repair/missing cùng historical revision; không coi test double là bằng chứng concurrency.
+
 ## Trải nghiệm nhập liệu và progressive disclosure
 
 - Jakob Nielsen (2006), [Progressive Disclosure](https://www.nngroup.com/articles/progressive-disclosure/), NN/g: đưa thông tin chuyên sâu sang lớp mở theo yêu cầu, giữ tác vụ thường dùng ở lớp chính. Giả định phải chọn đúng thông tin cần thấy; che lựa chọn quan trọng có thể làm người dùng bỏ sót. SmartRecon giữ câu hỏi mơ hồ và Health Gate nổi bật, thu gọn cột chắc chắn/preview, không ẩn cảnh báo tài chính. Kiểm chứng bằng browser scenarios/interaction counts; nguồn này không chứng minh người dùng SmartRecon hiểu thông báo. Theo quyết định chủ dự án, lần này chỉ nghiệm thu tự động, chưa observational usability study.

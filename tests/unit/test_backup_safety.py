@@ -81,3 +81,25 @@ def test_import_browser_qa_refuses_main_before_creating_files(tmp_path: Path) ->
         with pytest.raises(ValueError, match="restricted"):
             exercise(address, 390, 844, tmp_path / "not-created", ["csv"])
     assert not (tmp_path / "not-created").exists()
+
+
+def test_review_qa_refuses_main_before_http_requests() -> None:
+    from scripts.qa_concurrency import run
+
+    with pytest.raises(ValueError, match="restricted"):
+        run("http://localhost:8000")
+
+
+def test_demo_browser_qa_refuses_main_before_launch(monkeypatch) -> None:
+    from scripts.browser_smoke import main
+
+    monkeypatch.setattr("sys.argv", ["browser_smoke.py", "--url", "http://localhost:5173"])
+    with pytest.raises(ValueError, match="restricted"):
+        main()
+
+
+def test_parallel_export_qa_refuses_main_before_http(tmp_path: Path) -> None:
+    from scripts.qa_exports import exercise
+
+    with pytest.raises(ValueError, match="restricted"):
+        exercise("http://localhost:8000", tmp_path)
