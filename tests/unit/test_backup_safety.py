@@ -21,6 +21,48 @@ def test_backup_requires_explicit_lab_write_pause_before_any_command(tmp_path: P
     assert calls == []
 
 
+def test_main_approval_cannot_authorize_another_project(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr(backup_restore, "_compose", lambda *args, **kwargs: pytest.fail("Must refuse before Docker"))
+    with pytest.raises(ValueError, match="approved"):
+        backup_restore.create_backup(
+            tmp_path / "backup",
+            run_id=None,
+            base_url="http://localhost:8000",
+            project="another_project",
+            approved_main_maintenance=True,
+        )
+
+
+def test_cutover_requires_approval_and_exact_main_workspace(tmp_path: Path) -> None:
+    from scripts.deploy_release import deploy
+
+    with pytest.raises(ValueError, match="approval"):
+        deploy(tmp_path, tmp_path, {}, approved=False)
+    with pytest.raises(ValueError, match="workspace"):
+        deploy(tmp_path, tmp_path, {}, approved=True)
+
+
+def test_lab_cannot_leave_writer_stopped_with_main_flag(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="approved main"):
+        backup_restore.create_backup(
+            tmp_path / "backup",
+            run_id=None,
+            base_url="http://localhost:8002",
+            project="smartrecon_lab",
+            pause_lab_writes=True,
+            leave_writer_stopped=True,
+        )
+
+
+def test_cutover_rejects_lab_backup_before_any_docker_command(tmp_path: Path, monkeypatch) -> None:
+    from scripts.deploy_release import deploy
+
+    (tmp_path / "manifest.json").write_text(json.dumps({"source_project": "smartrecon_lab"}), encoding="utf-8")
+    monkeypatch.setattr(backup_restore, "_command", lambda *args, **kwargs: pytest.fail("No Docker allowed"))
+    with pytest.raises(ValueError, match="MAIN backup"):
+        deploy(Path(r"C:\Work\ReconcileEngine"), tmp_path, {}, approved=True)
+
+
 def test_artifact_inventory_detects_changed_missing_and_extra_files(tmp_path: Path) -> None:
     original = tmp_path / "result.json"
     original.write_text('{"cash": 123}', encoding="utf-8")

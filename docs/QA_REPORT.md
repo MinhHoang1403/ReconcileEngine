@@ -1,5 +1,13 @@
 # Báo cáo nghiệm thu kỹ thuật
 
+## Release rehearsal — Checkpoint G, 2026-10-21
+
+F `4328cf4854450c33d5e8b4d9b4f43cd75089e061` đã push, GitHub Actions [39530399825](https://github.com/MinhHoang1403/ReconcileEngine/actions/runs/39530399825) success cả ba jobs. Chủ dự án phê duyệt đồng bộ container chính và dọn container cũ sau hoàn tất. Không hiểu phê duyệt là xóa database/artifacts hoặc commit dữ liệu/secrets.
+
+`scripts/release_rehearsal.py` restore backup F vào `smartrecon_restore_b3aa401a67`, nâng lên image release, Alembic check không diff, giả lập ngừng backend và rollback app cũ **trước ghi mới**: mọi row/file hashes giữ nguyên. Nâng lại candidate, tạo synthetic run `7fd5b856-299e-495a-8d47-300a4c9a8aeb` và approve thành revision 1/một audit action/cash 66.531.000. Tạo backup nhất quán mới `reports/lab/release-rehearsal-after-writes`, rồi ngừng backend và rollback app cũ trên **storage mới nhất**: toàn bộ DB/artifacts cùng snapshot run/revision/audit/KPI giữ nguyên; quay lại candidate cũng giữ nguyên, Excel revision 1 trả 57.134 bytes. Không dùng snapshot cũ để che mất ghi mới. Project được stop, volumes/images giữ lại. Evidence `release-rehearsal.json` chứa image IDs/state fingerprint và kết quả hai tình huống rollback.
+
+Runtime backend release image `decd29e0…b09b2`, frontend `ec663c0e…5f09e`; old app backend `3a9a5dfc…e99a6`, frontend `bee50665…dc37`. Root dependency lock không đổi; không migration mới. Guard mới cho main backup/cutover có unit tests từ chối thiếu approval, workspace sai, project khác, Lab backup cho main và việc bỏ writer Lab ở trạng thái dừng. Trước sửa việc `ps` không thấy frontend dừng đã làm backup chính fail trước mọi dữ liệu copy; sửa dùng `--all`, không bỏ qua check. Regression vận hành scripts trước lần chỉnh nhỏ backup: 243 Python passed/21,86 s, Ruff đạt. Kết quả cutover/restart/cleanup chính sẽ được ghi sau thực thi, không coi rehearsal là đã deploy.
+
 ## Tổng kiểm định — Checkpoint F, chốt 2026-10-21
 
 E đã push `61645f9feb92f895d3d8cd2366c34a01fa898f4a`; GitHub Actions [39404690204](https://github.com/MinhHoang1403/ReconcileEngine/actions/runs/39404690204) success backend/frontend/containers. F đã đạt sau khi xử lý metadata ORM theo phê duyệt riêng của chủ dự án; ngày 21/10 chủ dự án yêu cầu hoàn tất, đồng bộ môi trường chính và dọn container cũ sau kiểm chứng. Phê duyệt này không bỏ yêu cầu backup/restore/rollback và bảo toàn dữ liệu.

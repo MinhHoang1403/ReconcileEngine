@@ -15,3 +15,5 @@ reports
 .env.*
 !.env.example
 *.log
+.vscode
+a_website_first

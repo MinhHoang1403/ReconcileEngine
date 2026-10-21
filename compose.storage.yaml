@@ -1,0 +1,6 @@
+# Explicit storage generation for approved cutover; old volumes are never removed.
+volumes:
+  pg_data:
+    name: ${POSTGRES_VOLUME:?Choose a separately restored PostgreSQL volume}
+  artifacts_data:
+    name: ${ARTIFACTS_VOLUME:?Choose a separately restored artifact volume}

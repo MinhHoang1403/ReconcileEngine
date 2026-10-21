@@ -103,9 +103,23 @@ Trên Linux thay biến PowerShell bằng đường dẫn timestamp tương đư
 - kiểm tra lại run/revision, audit history, allocation count/tổng tiền, KPI, conservation và tạo lại XLSX;
 - dừng project thử có tên `smartrecon_restore_<random>` sau khi đạt và giữ volumes để kiểm tra lại.
 
-Nhánh nghiên cứu yêu cầu project rõ ràng cho mọi lệnh Compose. Script chỉ tự dừng writer đối với `smartrecon_lab` hoặc project restore đã được kiểm tra; từ chối dừng hệ thống chính. Nó xác minh URL đúng cổng backend, volume thuộc project và chỉ có một application writer. Backend lab được drain/dừng trước `pg_dump` và copy artifacts, rồi khởi động lại trong `finally`. Phiên DB khác còn tồn tại sẽ làm backup thất bại. Đây là khoảng không ghi được thiết lập ở lab; script không tuyên bố backup DB/artifacts online là nguyên tử.
+Mọi lệnh Compose cần project rõ ràng. Script mặc định chỉ dừng writer Lab/restore. Project chính `reconcileengine` phải có phê duyệt chủ dự án và cờ riêng `--approve-main-maintenance`; `--leave-writer-stopped` giữ đóng ghi trong lúc cutover. Script xác minh URL, volume thuộc project và sole writer, drain trước pg_dump/copy; DB client khác làm backup thất bại. Không tuyên bố backup online là nguyên tử. Frontend đã dừng vẫn được nhận diện image bằng `ps --all`.
 
-Mỗi backup giữ image tags riêng cùng image IDs. Restore kiểm tra IDs rồi dùng `--no-build --pull never`; không âm thầm thay source/image khi bản cũ không còn. Giữ cả các image backup nếu cần phục hồi. `--keep` giữ project drill đang chạy; mặc định dừng nhưng giữ containers/volumes/images. `--output` lưu JSON nghiệm thu ngoài Git. Backup hệ thống chính cần maintenance window và phê duyệt riêng; các lệnh tự dừng hiện bị chặn. Chuyển bản backup tới storage mã hóa, giới hạn truy cập và áp dụng retention của tổ chức vì raw files có thể chứa dữ liệu tài chính.
+Mỗi backup giữ image tags/IDs, SHA từng file và frozen DB table hashes. Restore kiểm tra IDs rồi `--no-build --pull never`. `--keep` giữ project drill chạy; mặc định dừng, không xóa volumes/images. Dữ liệu backup có thể nhạy cảm: giữ ngoài Git, hạn chế truy cập, chuyển storage mã hóa theo chính sách chủ dự án. Backup chính chỉ trong maintenance đã phê duyệt.
+
+## Cutover đã được chủ dự án phê duyệt ngày 2026-10-21
+
+Chỉ sau gates A–F và rehearsal G. Runtime release `4328cf4`: backend `smartrecon-backend:release-4328cf4` / image `sha256:decd29e02e96d3f5f69b2fa772b08c99000a5597426dd920db0c0b746e8b09b2`, frontend `smartrecon-frontend:release-4328cf4` / `sha256:ec663c0eebe0836825208229f1bcae66a0967acc6b4a517e06176c4fe875f09e`. Host scripts/runbook có commit riêng; không nằm trong runtime image. Dependencies root giữ uv.lock/package-lock; nghiên cứu giữ research/uv.lock, không thêm dependencies nghiên cứu vào production. Migration mới: **không**, head `20261017_04`; ORM đã khớp schema hiện hữu theo phê duyệt.
+
+1. Công bố maintenance, đóng frontend chính và drain backend. Backup `--project reconcileengine --approve-main-maintenance --leave-writer-stopped` từ trạng thái hiện tại, không dùng snapshot Lab hoặc snapshot cũ.
+2. Verify checksum dump/từng artifact, restore-drill riêng; kiểm tra run mới nhất, revisions, audit, cash/conservation và Excel.
+3. `scripts/deploy_release.py` cần `--approve-main-cutover`, đúng workspace `C:\Work\ReconcileEngine`, chỉ nhận backup chính đã phê duyệt, writer dừng và DB hashes vẫn khớp. Sinh **hai volume mới** với tên ngẫu nhiên; từ chối volume đã tồn tại. Restore không `--clean` vào DB cũ. Copy artifacts trước khi mở writer; check DB/files/snapshot và Alembic rồi mở frontend 5173/API 8000. Không đưa dữ liệu thí nghiệm vào chính.
+4. Sau xác minh, lưu trong `.env` bị ignore: image tags, `POSTGRES_VOLUME`, `ARTIFACTS_VOLUME`, `COMPOSE_FILE=compose.yaml;compose.storage.yaml` (Windows; Linux dùng `:`). `compose.storage.yaml` chỉ chọn storage generation, không đổi kiến trúc. Giữ `.env` cũ và old volume names trong bản sao lưu local ngoài Git.
+5. Smoke upload→Health→run→dashboard→Excel và review/history trên chính chỉ sau phê duyệt; test synthetic được ghi rõ. Kiểm tra lại toàn bộ dữ liệu cũ, restart, health và source/GitHub CI.
+
+Rollback A (chưa có ghi mới): dừng app, dùng image `rollback-4dfd62e` và đúng DB/artifact volumes cũ, giữ nguyên candidate volumes. Rollback B (đã có ghi): đóng ghi, backup **mới**; chỉ rollback application trên storage mới khi schema tương thích đã được rehearsal chứng minh. Không bật DB snapshot cũ rồi coi run mới còn. Rehearsal đã thêm một run+approval revision 1 và xác minh toàn bộ bảng/files cùng snapshot khi quay về old app, sau đó trở lại candidate. Nếu schema không tương thích hoặc checksum lệch: NO-GO, giữ mọi storage và xin quyết định, không xóa/ghi đè dữ liệu để rollback.
+
+RPO dự kiến **0 với ghi đã commit trong maintenance được drain**; không hứa khôi phục thao tác người dùng chưa gửi/commit. Downtime gồm backup+restore-drill+restore+health, không có HA/zero-downtime. Dọn sau nghiệm thu chỉ container Lab/restore và container ứng dụng cũ đã xác định; không volume prune/image prune, không chạm dự án khác. Giữ backup, rollback images và old volumes để quay lại.
 
 ## Môi trường nghiên cứu độc lập
 

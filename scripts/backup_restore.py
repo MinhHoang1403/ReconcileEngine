@@ -14,6 +14,7 @@ import sys
 import time
 import urllib.error
 import urllib.request
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -75,6 +76,29 @@ def _database_scalar(sql: str, *, project: str | None = None, environment: dict[
         project=project,
         environment=environment,
     )
+
+
+def database_inventory(project: str, environment: dict[str, str] | None = None) -> list[str]:
+    """Read a repeatable table fingerprint; used to reject stale cutover backups."""
+    tables = (
+        "upload_sessions",
+        "runs",
+        "run_revisions",
+        "review_actions",
+        "match_groups",
+        "allocation_edges",
+        "verified_adjustments",
+        "artifact_manifest",
+        "import_profiles",
+        "alembic_version",
+    )
+    statements = [
+        f"SELECT '{table}', count(*), md5(COALESCE(string_agg(row_text, '' ORDER BY row_text), '')) "
+        f"FROM (SELECT row_to_json(t)::text row_text FROM {table} t) rows"
+        for table in tables
+    ]
+    sql = "BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY; " + " UNION ALL ".join(statements) + "; COMMIT;"
+    return sorted(_database_scalar(sql, project=project, environment=environment).splitlines())
 
 
 def _request(url: str, *, timeout: float = 60) -> tuple[bytes, str]:
@@ -184,10 +208,16 @@ def create_backup(
     base_url: str,
     project: str,
     pause_lab_writes: bool = False,
+    approved_main_maintenance: bool = False,
+    leave_writer_stopped: bool = False,
 ) -> Path:
-    """Back up a lab with its sole application writer stopped; never pause the main system."""
-    if not pause_lab_writes or not LAB_PROJECT_PATTERN.fullmatch(project):
-        raise ValueError("Consistent backup requires explicit lab write pause; main shutdown is not authorized")
+    """Drain one verified writer; main requires a separate explicit maintenance approval."""
+    main_approved = project == "reconcileengine" and approved_main_maintenance
+    lab_approved = bool(LAB_PROJECT_PATTERN.fullmatch(project)) and pause_lab_writes
+    if not (main_approved or lab_approved):
+        raise ValueError("Consistent backup requires explicit lab write pause or approved main maintenance")
+    if leave_writer_stopped and not main_approved:
+        raise ValueError("Leaving a writer stopped requires approved main maintenance")
     backend_id = _compose(["ps", "--quiet", "backend"], project=project)
     backend = json.loads(_command(["docker", "inspect", backend_id]))[0]
     if backend["Config"]["Labels"]["com.docker.compose.project"] != project:
@@ -211,7 +241,7 @@ def create_backup(
     volume_users = _command(["docker", "ps", "--filter", "volume=" + artifact_mount["Name"], "--quiet"]).splitlines()
     if len(volume_users) != 1 or not backend_id.startswith(volume_users[0]):
         raise ValueError("Artifact volume must have exactly one running application writer")
-    frontend_id = _compose(["ps", "--quiet", "frontend"], project=project)
+    frontend_id = _compose(["ps", "--all", "--quiet", "frontend"], project=project)
     frontend = json.loads(_command(["docker", "inspect", frontend_id]))[0]
     images = {"backend": _pin_image(backend, "backend"), "frontend": _pin_image(frontend, "frontend")}
     output_directory = output_directory.resolve()
@@ -230,8 +260,8 @@ def create_backup(
     )
     allocation_count, allocation_total = (int(value) for value in allocation_row.split("|"))
 
-    # SIGTERM drains the single Uvicorn worker before copying either store. The scope
-    # guard above deliberately forbids stopping an operator's main deployment.
+    # SIGTERM drains the sole writer before copying either store. Main is never
+    # paused implicitly: the caller must have explicit owner maintenance approval.
     _compose(["stop", "--timeout", "60", "backend"], project=project)
     container_dump = f"/tmp/smartrecon-backup-{secrets.token_hex(8)}.dump"
     try:
@@ -250,6 +280,7 @@ def create_backup(
         )
         if int(current_revision) != revision:
             raise AssertionError("Source revision changed while draining writes; retry backup")
+        frozen_database = database_inventory(project)
         _compose(
             [
                 "exec",
@@ -266,15 +297,18 @@ def create_backup(
         _compose(["cp", f"backend:{artifact_root}/.", str(artifact_directory)], project=project)
     finally:
         _compose(["exec", "-T", "db", "rm", "-f", container_dump], project=project)
-        _compose(["start", "backend"], project=project)
-        _wait_for_url(base_url.rstrip("/") + "/healthz")
+        if not leave_writer_stopped:
+            _compose(["start", "backend"], project=project)
+            _wait_for_url(base_url.rstrip("/") + "/healthz")
 
     artifact_count, artifact_bytes = _artifact_stats(artifact_directory)
     manifest = {
         "created_at": datetime.now(UTC).isoformat(),
         "format": "smartrecon-backup",
         "source_project": project,
+        "approved_main_maintenance": main_approved,
         "consistency": "single_application_writer_drained_and_stopped",
+        "database_inventory": frozen_database,
         "images": images,
         "database": {
             "filename": dump_path.name,
@@ -319,7 +353,12 @@ def _restore_environment() -> tuple[dict[str, str], int, int]:
     return environment, backend_port, frontend_port
 
 
-def restore_drill(backup_directory: Path, *, keep: bool = False) -> dict[str, Any]:
+def restore_drill(
+    backup_directory: Path,
+    *,
+    keep: bool = False,
+    exercise: Callable[[str, dict[str, str], str, str], dict[str, Any]] | None = None,
+) -> dict[str, Any]:
     """Restore a backup into isolated volumes and verify the persisted business state."""
     backup_directory = backup_directory.resolve()
     manifest = json.loads((backup_directory / "manifest.json").read_text(encoding="utf-8"))
@@ -441,6 +480,8 @@ def restore_drill(backup_directory: Path, *, keep: bool = False) -> dict[str, An
             "conservation_valid": True,
             "frontend_url": f"http://127.0.0.1:{frontend_port}",
         }
+        if exercise is not None:
+            result["exercise"] = exercise(project, environment, api_url, f"http://127.0.0.1:{frontend_port}")
         return result
     finally:
         if not keep:
@@ -459,6 +500,8 @@ def main() -> None:
     backup_parser.add_argument("--base-url", default="http://127.0.0.1:8000")
     backup_parser.add_argument("--project", required=True)
     backup_parser.add_argument("--pause-lab-writes", action="store_true")
+    backup_parser.add_argument("--approve-main-maintenance", action="store_true")
+    backup_parser.add_argument("--leave-writer-stopped", action="store_true")
     drill_parser = subparsers.add_parser("restore-drill")
     drill_parser.add_argument("backup_directory", type=Path)
     drill_parser.add_argument("--keep", action="store_true")
@@ -472,6 +515,8 @@ def main() -> None:
             base_url=arguments.base_url,
             project=arguments.project,
             pause_lab_writes=arguments.pause_lab_writes,
+            approved_main_maintenance=arguments.approve_main_maintenance,
+            leave_writer_stopped=arguments.leave_writer_stopped,
         )
         print(json.dumps({"manifest": str(manifest)}, ensure_ascii=False))
     else:
