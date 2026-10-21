@@ -2,7 +2,15 @@
 
 SmartRecon là ứng dụng đối soát hai nguồn: khoản phải thu nội bộ và giao dịch ghi có ngân hàng/PSP. Hệ thống ưu tiên bảo toàn tiền, tránh tự ghép khi thiếu bằng chứng, và lưu dấu vết cho từng kết quả.
 
-Trên nhánh nghiên cứu, file rõ nghĩa được đưa thẳng qua kiểm tra chất lượng, không bắt chọn từng cột. Hệ thống vẫn hỏi khi cột/tiền/ngày/nguồn mơ hồ và chỉ chạy đối soát khi người dùng nhấn nút. Xem [hướng dẫn nhập liệu](docs/SMART_IMPORT_GUIDE.md). Mọi thử nghiệm nâng cấp đang chạy riêng tại Lab `http://localhost:5174`; chưa chuyển môi trường chính và chưa kiểm chứng usability với người dùng thật.
+File rõ nghĩa được đưa thẳng qua kiểm tra chất lượng, không bắt chọn từng cột. Hệ thống vẫn hỏi khi cột/tiền/ngày/nguồn mơ hồ và chỉ chạy đối soát khi người dùng nhấn nút. Xem [hướng dẫn nhập liệu](docs/SMART_IMPORT_GUIDE.md). Nghiệm thu UX hiện chỉ bằng kiểm thử tự động, chưa kiểm chứng với người dùng thật.
+
+## Bàn giao — 2026-10-21
+
+Đợt nghiên cứu A–G đã nghiệm thu và đưa vào môi trường chính theo phê duyệt chủ dự án. Website `http://localhost:5173`, API `http://localhost:8000/healthz`; ba service healthy, migration head `20261017_04`, không migration mới. Runtime source/backend/frontend đã đối chiếu khớp; dependencies nghiên cứu không nằm trong runtime.
+
+Workspace `C:\Work\ReconcileEngine`, branch `main`. `.env` local đã chọn image release và hai volume phục hồi mới qua `compose.storage.yaml`; **không chép đè `.env` đang dùng bằng file ví dụ**. Khởi động lại bằng `docker compose -p reconcileengine up -d --no-build --pull never`. Không chạy `down -v`, volume prune hoặc xóa rollback images. PostgreSQL/artifacts cũ và backup trước cutover vẫn còn; 31 container Lab/restore đã dọn, không ảnh hưởng dự án khác. Tạm dừng phát triển không yêu cầu tắt website.
+
+Bằng chứng/giới hạn: [nghiệm thu](docs/ACCEPTANCE_REPORT.md), [QA](docs/QA_REPORT.md), [triển khai/rollback](docs/DEPLOYMENT.md), [đối chứng](docs/EVALUATION_REPORT.md). Reports và backup dữ liệu nằm ngoài Git trong `reports/deployment/` và `reports/backups/main-maintenance-20261021/`.
 
 ## Khởi động bằng Docker Desktop
 

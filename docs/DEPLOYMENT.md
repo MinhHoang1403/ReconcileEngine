@@ -109,6 +109,10 @@ Mỗi backup giữ image tags/IDs, SHA từng file và frozen DB table hashes. R
 
 ## Cutover đã được chủ dự án phê duyệt ngày 2026-10-21
 
+Trạng thái đã thực thi: main phục vụ 5173/8000 bằng release images dưới đây; volumes đang dùng `reconcileengine_pg_data_19bad7ab0b` và `reconcileengine_artifacts_data_19bad7ab0b`. Các lệnh vận hành thường lệ từ workspace chính tự đọc `.env` local/`compose.storage.yaml`; không bỏ override hoặc thay `.env` bằng ví dụ. Backup cutover đã restore drill/copy kiểm tra tại `reports/backups/main-maintenance-20261021/` (còn bản tại worktree Lab). Có 72 runs sau một smoke synthetic đã phê duyệt; backup chứa 71 runs trước smoke. Một backup bổ sung sau smoke bị execution policy chặn trước chạy, không coi là có backup mới. Không rollback database từ backup đó nếu có dữ liệu mới; tạo backup mới theo quy trình được phê duyệt.
+
+Đã dọn 31 container Lab/restore và tám network rỗng bằng `scripts/cleanup_trials.py --approve-cleanup`; mọi volumes/images và dự án khác giữ nguyên. Muốn khởi động main: `docker compose -p reconcileengine up -d --no-build --pull never`; muốn tạm dừng website khi cần: `docker compose -p reconcileengine stop`, không `down -v`. Tiếp tục phát triển sau bàn giao phải audit Git/data/backup mới, không tái dùng snapshot nghiên cứu làm dữ liệu hiện hành.
+
 Chỉ sau gates A–F và rehearsal G. Runtime release `4328cf4`: backend `smartrecon-backend:release-4328cf4` / image `sha256:decd29e02e96d3f5f69b2fa772b08c99000a5597426dd920db0c0b746e8b09b2`, frontend `smartrecon-frontend:release-4328cf4` / `sha256:ec663c0eebe0836825208229f1bcae66a0967acc6b4a517e06176c4fe875f09e`. Host scripts/runbook có commit riêng; không nằm trong runtime image. Dependencies root giữ uv.lock/package-lock; nghiên cứu giữ research/uv.lock, không thêm dependencies nghiên cứu vào production. Migration mới: **không**, head `20261017_04`; ORM đã khớp schema hiện hữu theo phê duyệt.
 
 1. Công bố maintenance, đóng frontend chính và drain backend. Backup `--project reconcileengine --approve-main-maintenance --leave-writer-stopped` từ trạng thái hiện tại, không dùng snapshot Lab hoặc snapshot cũ.

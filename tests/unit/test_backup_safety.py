@@ -140,6 +140,44 @@ def test_demo_browser_qa_refuses_main_before_launch(monkeypatch) -> None:
         main()
 
 
+def test_main_smoke_approval_never_allows_external_host(monkeypatch) -> None:
+    from scripts.browser_smoke import main
+
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "browser_smoke.py",
+            "--url",
+            "http://example.org:5173",
+            "--approve-main-smoke",
+        ],
+    )
+    with pytest.raises(ValueError, match="restricted"):
+        main()
+
+
+def test_cleanup_never_selects_main_or_unrelated_containers() -> None:
+    from scripts.cleanup_trials import cleanup, select_trials
+
+    def row(project: str, name: str) -> dict:
+        return {"Name": name, "Config": {"Labels": {"com.docker.compose.project": project}}}
+
+    valid = [
+        row("smartrecon_lab", "/smartrecon_lab-db-1"),
+        row("smartrecon_restore_123456789a", "/smartrecon_restore_123456789a-backend-1"),
+    ]
+    invalid = [
+        row("reconcileengine", "/reconcileengine-db-1"),
+        row("shopquery-ai", "/shopquery-ai-api-1"),
+        row("smartrecon_restore_unsafe", "/smartrecon_restore_unsafe-db-1"),
+        row("smartrecon_lab", "/unrelated-db-1"),
+    ]
+    assert select_trials(valid + invalid) == valid
+    assert select_trials([{"Name": "/standalone", "Config": {"Labels": None}}]) == []
+    with pytest.raises(ValueError, match="approval"):
+        cleanup(approved=False)
+
+
 def test_parallel_export_qa_refuses_main_before_http(tmp_path: Path) -> None:
     from scripts.qa_exports import exercise
 

@@ -1,5 +1,19 @@
 # Báo cáo nghiệm thu hệ thống
 
+## Bàn giao môi trường chính — 2026-10-21
+
+**Đã triển khai theo phê duyệt chủ dự án**, sau gates A–G và rehearsal rollback trước/sau ghi mới. Code ứng dụng release `4328cf4`, scripts triển khai `a62c042`; main fast-forward an toàn, giữ lịch sử. Backend image `sha256:decd29e02e96d3f5f69b2fa772b08c99000a5597426dd920db0c0b746e8b09b2`, frontend `sha256:ec663c0eebe0836825208229f1bcae66a0967acc6b4a517e06176c4fe875f09e`. Đã đối chiếu 38 core/28 backend Python files và JS/CSS build khớp source local, không chỉ dựa tag.
+
+Trước smoke, toàn bộ mười bảng, 545 artifacts và sample runs khớp backup chính mới nhất: giữ 71 runs/112 revisions/41 review actions cũ, cả phiên chủ dự án tạo trong E. Sau smoke được phê duyệt có thêm đúng một run synthetic `8bbd6e8d-2c22-4d60-98d9-8380f0cd788b`, approve/undo/reopen đầy đủ; không đưa dữ liệu Lab vào chính. Bảy Excel sai checksum được dựng lại đúng revision; 538 file cũ khác không đổi, không sửa raw/result/matching/review lịch sử. Audit 552 manifest rows không mismatch; 555 files/47.413.721 bytes. Restart và cleanup giữ nguyên DB/artifacts/sample runs.
+
+Volumes mới `reconcileengine_pg_data_19bad7ab0b` / `reconcileengine_artifacts_data_19bad7ab0b`; hai volumes cũ còn nguyên. Ba service healthy tại 5173/8000, migrate exit 0/head `20261017_04`, Alembic check không diff. Đã dọn 31 container Lab/restore và tám network rỗng; giữ mọi volumes/images/backups và container dự án khác. Migration chính exit 0 là one-shot bình thường, không phải container lỗi cần xóa.
+
+Regression: **246 Python / 23 frontend tests**, Ruff lint/format, ESLint, TypeScript/Vite build đạt; npm runtime audit 0 vulnerabilities; golden/property 33 tests phủ 24 fixtures. Browser ba viewport và schemas khác đã nghiệm thu tự động, **chưa kiểm chứng với người dùng thật** theo quyết định chủ dự án. Stress tới giới hạn generator 3.000 đơn, không tuyên bố 10.000 hoặc quy mô production. M:N vẫn review-only, không thêm runtime Splink/OR-Tools/Valentine/ML/LLM.
+
+Backup trước cutover dump 845.440 bytes/SHA `6870be29cf4f2d9c05c30091fa63e4651424926073185e081d4edb119777d501`, đủ 545 artifacts, đã restore drill và copy kiểm tra SHA về `reports/backups/main-maintenance-20261021`. Backup này chứa mọi phiên người dùng trước cutover, không chứa phiên synthetic smoke sau đó. Lệnh backup bổ sung sau smoke bị execution policy chặn trước chạy; không lách cơ chế chặn/không ghi nhận đã backup lại. Storage chính có đủ phiên QA và đã kiểm tra persistence. Sau ghi mới không được dùng snapshot cũ làm rollback đầy đủ; phải backup mới theo runbook.
+
+Kết luận: **hoàn tất triển khai local, có thể tạm dừng phát triển**. Không chứng nhận public production: chưa auth/RBAC/HTTPS/HA/human usability; Plotly bundle ~1,55 MB và hai warning Python đã công bố. Evidence chi tiết trong QA_REPORT và `reports/deployment/` ngoài Git. Push/CI commit bàn giao phải xác nhận thực tế, không suy từ CI cũ.
+
 ## Đợt nghiên cứu trên môi trường độc lập — 2026-10-20
 
 Yêu cầu mới được triển khai trên nhánh `research/import-reconciliation`, worktree `C:\Work\ReconcileEngine-Lab`, lấy baseline `4dfd62e3bf8289477e291463f5afa4b41c0505d4`. Kết luận nghiệm thu cũ bên dưới chỉ áp dụng cho baseline, không chứng nhận các cải tiến đang nghiên cứu.
@@ -12,7 +26,7 @@ Yêu cầu mới được triển khai trên nhánh `research/import-reconciliat
 | D — Classification và residual theo cấp nghiệp vụ | Đạt oracle/residual/review và historical exports; 220 Python/20 frontend tests |
 | E — Workflow gần một nút và usability | Đạt phạm vi tự động theo phê duyệt: 15/15 file workflows/ba viewport, expert path và demo E2E; chưa kiểm chứng người dùng thật |
 | F — Đối chứng tổng hợp/regression | Đạt: 240 Python/23 frontend, đối chứng holdout/stress, checksum/concurrency, restart/restore; ORM khớp schema, không migration mới |
-| G — Diễn tập cutover/rollback và quyết định GO/NO-GO | GO cho cutover được chủ dự án phê duyệt 21/10: rehearsal rollback trước/sau ghi mới đạt; phải dùng backup chính mới nhất, không Lab data |
+| G — Diễn tập cutover/rollback và quyết định GO/NO-GO | Đạt; cutover chính 21/10 theo phê duyệt từ backup chính mới nhất; persistence/cleanup đạt |
 
 Hệ thống chính giữ nguyên source/branch và container/image IDs. Trong E chủ dự án có thêm một run (đã xác nhận); đối chiếu scoped cho thấy DB/artifacts/sample runs có trước phiên đó không đổi. Từ mốc mới `main-before-regression.json`, tiếp tục so toàn bộ trạng thái mà không bỏ qua phát sinh ngoài dự kiến. Lab ở 5174/8002 với storage/network riêng; cổng 8001 thuộc project khác. Dữ liệu dùng cho backup/drill là synthetic. Script từ chối tự dừng writer của project chính; cutover và maintenance chính vẫn cần phê duyệt riêng. Không push `main`.
 

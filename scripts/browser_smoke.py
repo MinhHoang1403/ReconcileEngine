@@ -130,10 +130,16 @@ def main() -> None:
     parser.add_argument("--screenshot-dir", type=Path)
     parser.add_argument("--all-stages", action="store_true")
     parser.add_argument("--output", type=Path)
+    parser.add_argument("--approve-main-smoke", action="store_true")
     args = parser.parse_args()
     address = urlsplit(args.url)
-    if address.scheme != "http" or address.hostname not in {"localhost", "127.0.0.1"} or address.port != 5174:
-        raise ValueError("Mutation QA is restricted to loopback Lab website port 5174")
+    allowed_ports = {5174, 5173} if args.approve_main_smoke else {5174}
+    if (
+        address.scheme != "http"
+        or address.hostname not in {"localhost", "127.0.0.1"}
+        or address.port not in allowed_ports
+    ):
+        raise ValueError("Mutation QA is restricted to Lab, or main with explicit approved smoke")
 
     port = free_port()
     profile = Path(tempfile.mkdtemp(prefix="smartrecon-browser-"))

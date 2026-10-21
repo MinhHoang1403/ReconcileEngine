@@ -1,5 +1,25 @@
 # Báo cáo nghiệm thu kỹ thuật
 
+## Cutover chính, persistence và cleanup — 2026-10-21
+
+Chủ dự án yêu cầu đồng bộ container chính, dọn cũ và push main. G `a62c0427e72c6f6539789a560d5206a4afa2c5b3` đã push; Actions [39531022429](https://github.com/MinhHoang1403/ReconcileEngine/actions/runs/39531022429) success cả ba jobs. Main fast-forward `4dfd62e→a62c042`; `.vscode/settings.json` và `a_website_first/` giữ nguyên và thêm ignore, không commit hoặc đưa dữ liệu local vào build context.
+
+Backup MAIN trong maintenance: frontend đóng, backend drain/dừng, frozen table hashes; dump 845.440 bytes/SHA-256 `6870be29cf4f2d9c05c30091fa63e4651424926073185e081d4edb119777d501`, 545 files/46.438.582 bytes. Restore drill `smartrecon_restore_025e420f4e` đọc đúng run `da96b65c-e093-4432-8993-19ebe8cee652`, revision 0, 2.490 allocations/2.259.711.000 VND, conservation true, Excel 1.066.879 bytes. Backup/old `.env` giữ ngoài Git trong main/Lab; checksum dump/từng file đã kiểm tra sau copy.
+
+`deploy_release` xác minh writer dừng, frozen database đúng backup và chỉ nhận backup MAIN có approval. Restore vào volumes mới `reconcileengine_pg_data_19bad7ab0b` / `reconcileengine_artifacts_data_19bad7ab0b`, không `--clean` lên DB cũ. Copy artifacts trước mở app, kiểm Alembic/head/check rồi so toàn bộ DB/files/snapshot trước mở frontend. `after-cutover-before-smoke.json`: database/artifacts/sample runs đều trùng baseline. Old volumes và rollback image tags còn nguyên. `.env` local chọn generation qua `compose.storage.yaml`; standard Compose validate và restart dùng đúng volumes. Cảnh báo labels old volumes tồn tại là hệ quả chủ động giữ rollback data, không phải lý do xóa volume.
+
+Browser main có `--approve-main-smoke`, mặc định vẫn chặn main và approval không cho external host. Run synthetic `8bbd6e8d-2c22-4d60-98d9-8380f0cd788b` đi đủ demo→automatic Health→warning source detail→acknowledge tường minh→matching→dashboard→Excel→approve→undo→reopen; cash 66.431.000 VND, conservation true, hai charts/bốn tabs, export 57.003 bytes/revision 1 57.168 bytes. Không runtime/console/network error, không tràn desktop. Đây là test được phê duyệt tạo một run, không phải user study.
+
+Audit trước repair có bảy XLSX mismatch từ baseline. Gọi historical export đúng revision dựng từ saved result, đủ chín sheets/không formulas, cập nhật SHA/size. Sau sửa **552/552 manifest đúng checksum**. `preservation.json`: chín bảng nghiệp vụ cũ (loại đúng run/upload synthetic mới), ba sample runs/KPI/conservation khớp baseline; đủ 545 file cũ, 538 không đổi, bảy derived exports repair được công bố. Không recompute matching hoặc sửa raw/canonical/result/review cũ. Workbook trước repair còn trong backup/old volumes.
+
+Main restart rồi up `--no-build --pull never`: ba service healthy/migrate exit 0. DB fingerprint trước/sau `85f843b51a160c91b2ba7794b80f02535b606eb8e7e6eeb549a538f3b2089f92`, 555 files/47.413.721 bytes/fingerprint `464f0d472a869225c73bdbf49bb1b3b5dfeacbc1fa0ba8c747b100510b6088fe`, sample runs không đổi. Runtime source verification đọc package thực đang import: **38 core/28 backend files** khớp source sau normalize line endings. JS SHA `a5b88824…9032f`, CSS `8631fb02…4eab` khớp production build, không chỉ tag.
+
+`cleanup_trials` dùng exact project regex + owned name, kiểm không shared main storage, chỉ rm không `-v`/prune. Đã xóa **31 trial containers/8 empty trial networks**, giữ mọi images/volumes và mọi protected container (main/ShopQuery/Acne). `after-cleanup.json` so `after-restart.json`: DB/artifacts/sample runs/main container IDs không đổi. Trial workspace/backups/rollback data vẫn còn, containers có thể tái tạo; main còn ba service chạy và one-shot migration exit 0.
+
+Regression bàn giao: **246 passed / 22,75 s**, Ruff lint/format **133 files**, frontend **23 passed**, ESLint/build đạt, npm runtime audit 0 vulnerabilities. Windows policy chặn launcher pytest.exe một lần; `uv run python -m pytest` chạy đạt, không đổi expectations. Hai warning Starlette/httpx và Windows ZMQ/Plotly chunk đã biết. Lệnh backup bổ sung sau smoke bị execution policy chặn **trước thực thi**; không retry đường vòng, không báo backup mới. Backup cutover đã restore thật chứa đủ mọi user run, không có synthetic smoke sau đó; phiên QA vẫn được lưu và kiểm tra restart. Runbook yêu cầu backup mới trước mọi rollback sau ghi mới.
+
+Source/tests/docs/scripts hợp lệ mới được commit; không `.env`, dữ liệu local, reports/backups, database runtime, uploads/build artifacts. CI commit bàn giao sẽ được xác nhận sau push, không lấy kết quả cũ thay thế.
+
 ## Release rehearsal — Checkpoint G, 2026-10-21
 
 F `4328cf4854450c33d5e8b4d9b4f43cd75089e061` đã push, GitHub Actions [39530399825](https://github.com/MinhHoang1403/ReconcileEngine/actions/runs/39530399825) success cả ba jobs. Chủ dự án phê duyệt đồng bộ container chính và dọn container cũ sau hoàn tất. Không hiểu phê duyệt là xóa database/artifacts hoặc commit dữ liệu/secrets.
